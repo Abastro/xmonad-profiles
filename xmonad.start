@@ -40,8 +40,5 @@ gnome-keyring-daemon --start --components=gpg,pkcs11,secrets,ssh
 # Monitor settings
 # xrandr --output eDP-1-0 --mode 1280x720 --scale 1x1
 
-# MAYBE move this out
-status-notifier-watcher &
-
 # Runs xmonad profile selection
 exec "$( dirname "$0" )/xmonad.select" "$1"
