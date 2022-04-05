@@ -1,8 +1,5 @@
 #!/bin/sh
-# Call with relevant profile name
-
 # Shared for Ubuntu
-export PROF_BASE="$0/.."
 
 # For GTK2
 export GTK2_RC_FILES="$HOME/.gtkrc-2.0"
@@ -46,10 +43,5 @@ gnome-keyring-daemon --start --components=gpg,pkcs11,secrets,ssh
 # MAYBE move this out
 status-notifier-watcher &
 
-# Sets up xmonad environment variables
-export XMONAD_DATA_DIR="$PROF_BASE/data/$1"
-export XMONAD_CONFIG_DIR="$PROF_BASE/$1"
-export XMONAD_CACHE_DIR="$PROF_BASE/cache/$1"
-
-# Starts xmonad
-exec xmonad > "$PROF_BASE/$1.log" 2> "$PROF_BASE/$1.err"
+# Runs xmonad profile selection
+exec "$( dirname "$0" )/xmonad.select" "$1"

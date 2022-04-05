@@ -1,0 +1,19 @@
+#!/bin/sh
+# Call with relevant profile name
+PROF_BASE="$( realpath "$( dirname "$0" )")"
+
+# Sets up xmonad environment variables
+export XMONAD_DATA_DIR="$PROF_BASE/data/$1"
+export XMONAD_CONFIG_DIR="$PROF_BASE/$1"
+export XMONAD_CACHE_DIR="$PROF_BASE/cache/$1"
+
+if [ -e "$XMONAD_CONFIG_DIR" ]
+then
+
+# Optionally creates data and cache directory
+mkdir -p "$XMONAD_DATA_DIR" "$XMONAD_CACHE_DIR"
+
+# Starts xmonad
+exec xmonad > "$PROF_BASE/logs/$1.log" 2> "$PROF_BASE/logs/$1.err"
+
+fi
