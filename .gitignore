@@ -1,6 +1,7 @@
 *.code-workspace
 
-*.yaml
+cabal.project
+dist-newstyle/
 
 data/
 cache/
