@@ -1,0 +1,7 @@
+cradle:
+  multi:
+    - path: "./scripts"
+      config:
+        cradle:
+          direct:
+            arguments: []
