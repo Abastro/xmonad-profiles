@@ -30,7 +30,7 @@ makeExecutable paths =
 whenNotExist :: String -> IO () -> IO ()
 whenNotExist cmd act =
   readCreateProcessWithExitCode (shell $ unwords ["command", "-v", cmd]) "" >>= \case
-    (ExitFailure 1, _, _) -> act
+    (ExitFailure _, _, _) -> act
     _ -> pure ()
 
 runAsSudo :: [String] -> IO ()
@@ -59,17 +59,24 @@ installProfile :: FilePath -> String -> IO ()
 installProfile installDir profile = do
   printf "[%s] Install Begin\n" profile
 
-  let profileDir = installDir </> profile
   let cacheDir = installDir </> "cache"
+  let dataDir = installDir </> "data"
+  let profileDir = installDir </> profile
 
   makeExecutable $
     map (profileDir </>) ["install", "build"]
 
   -- Assumes that /usr/share/xsessions exist
-  writeFile (cacheDir </> profileDir <.> "desktop") runner
-  runAsSudo ["mv", cacheDir </> profileDir <.> "desktop", "/usr/share/xsessions"]
+  writeFile (cacheDir </> profile <.> "desktop") runner
+  runAsSudo ["mv", cacheDir </> profile <.> "desktop", "/usr/share/xsessions"]
 
   callProcess (profileDir </> "install") []
+
+  -- Finally, try recompile using xmonad
+  setEnv "XMONAD_DATA_DIR" (dataDir </> profile)
+  setEnv "XMONAD_CONFIG_DIR" profileDir
+  setEnv "XMONAD_CACHE_DIR" (cacheDir </> profile)
+  callCommand "xmonad --recompile"
 
   printf "[%s] Install End\n" profile
   where
