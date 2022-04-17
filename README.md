@@ -23,6 +23,8 @@ Procedure:
 This procedure automatically installs profiles in `/usr/share/xsessions/`,
 which you can select from login screen.
 
+### Notes
+
 NB: Removal method is not yet supported; this is due to `cabal` lacking uninstall/gc methods.
 
 If you don't mind nuking the haskell stores,
