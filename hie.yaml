@@ -1,6 +1,6 @@
 cradle:
   multi:
-    - path: "./scripts"
+    - path: "./install"
       config:
         cradle:
           direct:
