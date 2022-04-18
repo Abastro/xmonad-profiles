@@ -4,4 +4,8 @@ cradle:
       config:
         cradle:
           direct:
-            arguments: []
+            arguments: ["-haddock"]
+    - path: "./xmonad-manage"
+      config:
+        cradle:
+          cabal:

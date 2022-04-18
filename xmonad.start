@@ -1,5 +1,6 @@
 #!/bin/sh
 # Entry point
-BASE_DIR="$( dirname "$0" )"
+cd "$( dirname "$0" )" || exit
+exec xmonad-manage run "$1"
 
-exec "$BASE_DIR/xmonad.setup" "$1" > "$BASE_DIR/logs/common.log" 2> "$BASE_DIR/logs/common.err"
+# exec "$BASE_DIR/xmonad.setup" "$1" > "$BASE_DIR/logs/common.log" 2> "$BASE_DIR/logs/common.err"

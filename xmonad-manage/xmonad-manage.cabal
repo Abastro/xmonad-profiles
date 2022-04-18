@@ -1,0 +1,22 @@
+cabal-version:      2.4
+name:               xmonad-manage
+version:            0.1.0.0
+synopsis:           Xmonad profile manager
+homepage:           https://github.com/Abastro/xmonad-profiles
+license:            BSD-3-Clause
+license-file:       LICENSE
+author:             Abastro
+maintainer:         abab9579@gmail.com
+copyright:          2022 Abastro
+
+executable xmonad-manage
+  main-is:          Main.hs
+  build-depends:
+      base ^>=4.16.1.0
+    , filepath
+    , directory
+    , mtl ==2.2.*
+    , process ==1.6.*
+  hs-source-dirs:   app
+  default-language: GHC2021
+  ghc-options:      -W

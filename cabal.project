@@ -1,0 +1,6 @@
+packages: xmonad-manage/xmonad-manage.cabal
+
+with-compiler: ghc-9.2.2
+
+package *
+  ghc-options: -haddock

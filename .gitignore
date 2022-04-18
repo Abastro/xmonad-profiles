@@ -1,6 +1,5 @@
 *.code-workspace
 
-cabal.project
 dist-newstyle/
 
 data/
