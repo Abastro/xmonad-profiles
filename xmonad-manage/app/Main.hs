@@ -94,7 +94,6 @@ installProfile sudo xmonad profile@Profile {..} = do
   installs <- setToExecutable (cfgDir </> "install")
   _ <- setToExecutable (cfgDir </> "build")
   _ <- setToExecutable starter -- For now, let's set starter here
-
   writeFile runnerPath (runner starter)
   callExe sudo ["ln", "-sf", runnerPath, runnerLinked]
 
@@ -105,14 +104,13 @@ installProfile sudo xmonad profile@Profile {..} = do
   where
     runnerLinked = "/usr" </> "share" </> "xsessions" </> profID <.> "desktop"
     runnerPath = dataDir </> "run" <.> "desktop"
-    [logs, errors] = (logDir </>) <$> ["common.log", "common.err"]
     runner starter =
       unlines
         [ printf "[Desktop Entry]",
           printf "Encoding=UTF-8",
           printf "Name=%s" profID,
           printf "Comment=Xmonad profile <%s>" profID,
-          printf "Exec=%s %s > %s 2> %s" (show starter) profID (show logs) (show errors),
+          printf "Exec=%s %s" (show starter) profID,
           printf "Type=XSession"
         ]
 
@@ -126,11 +124,13 @@ runXMonad xmonad Profile {..} untilEnd opts = do
     then callExe xmonad opts
     else do
       [logs, errors] <- traverse openLog ["xmonad.log", "xmonad.err"]
-      () <$ createProcess (exeToProc xmonad opts) {std_out = UseHandle logs, std_err = UseHandle errors}
+      (_, _, _, handle) <-
+        createProcess (exeToProc xmonad opts) {std_out = UseHandle logs, std_err = UseHandle errors}
+      () <$ waitForProcess handle -- TODO Can I start xmonad and close this program?
   where
     openLog name = openFile (logDir </> name) WriteMode
 
--- | The manager program. Current directory needs to be the parent.
+-- | The manager program. Current directory needs to be the profile main directory.
 main :: IO ()
 main = do
   parent <- getCurrentDirectory
@@ -145,7 +145,7 @@ main = do
         inst <- installProfile sudo <$> getExecutable "xmonad" <*> getProfile parent profID
         liftIO inst
       ["run", profID] -> do
-        liftIO (callProcess setupExe [])
+        liftIO (callProcess setupExe [] >> putStrLn "Now running xmonad...")
         runXM <- runXMonad <$> getExecutable "xmonad" <*> getProfile parent profID
         liftIO (runXM False [])
       args -> throwError (IllegalArgs args)
