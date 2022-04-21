@@ -16,6 +16,7 @@ executable xmonad-manage
     , filepath
     , directory
     , mtl ==2.2.*
+    , text ==2.0.*
     , process ==1.6.*
   hs-source-dirs:   app
   default-language: GHC2021

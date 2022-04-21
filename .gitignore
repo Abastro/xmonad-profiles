@@ -3,5 +3,7 @@
 dist-newstyle/
 
 data/
+config/
+handle/
 cache/
 logs/
