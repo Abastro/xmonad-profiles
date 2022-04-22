@@ -22,6 +22,7 @@ executable xmonad-manage
       base ^>=4.16.1.0
     , filepath
     , directory
+    , containers ==0.6.*
     , mtl ==2.2.*
     , text ==2.0.*
     , process ==1.6.*
