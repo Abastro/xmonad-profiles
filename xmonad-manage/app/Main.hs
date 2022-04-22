@@ -36,10 +36,6 @@ installProfile sudo xmonad profile@Profile {..} = do
   installs <- traverse (setToExecutable . (</>) cfgDir) installScript
   _ <- setToExecutable starter -- For now, let's set starter here
 
-  curDir <- getCurrentDirectory
-  writeFile (cfgDir </> "build") (builder curDir)
-  _ <- setToExecutable (cfgDir </> "build")
-
   writeFile runnerPath (runner starter)
   callExe sudo ["ln", "-sf", runnerPath, runnerLinked]
 
@@ -57,13 +53,6 @@ installProfile sudo xmonad profile@Profile {..} = do
           printf "Comment=Xmonad profile %s" profileID,
           printf "Exec=%s %s" (show starter) profileID,
           printf "Type=XSession"
-        ]
-
-    builder curDir =
-      unlines
-        [ printf "#!/bin/sh",
-          printf "cd %s || exit" (show curDir),
-          printf "exec xmonad-manage build %s %s" profileID (show "$1")
         ]
 
 -- | Runs xmonad for profile with given options.
