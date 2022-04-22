@@ -11,6 +11,13 @@ copyright:          2022 Abastro
 
 executable xmonad-manage
   main-is:          Main.hs
+  other-modules:
+    Checked
+    Profile
+  default-extensions:
+    LambdaCase
+    RecordWildCards
+    NoFieldSelectors
   build-depends:
       base ^>=4.16.1.0
     , filepath
@@ -18,6 +25,7 @@ executable xmonad-manage
     , mtl ==2.2.*
     , text ==2.0.*
     , process ==1.6.*
+    , parsec  ==3.1.*
   hs-source-dirs:   app
   default-language: GHC2021
   ghc-options:      -W

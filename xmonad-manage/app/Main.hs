@@ -1,13 +1,10 @@
-{-# LANGUAGE LambdaCase #-}
-{-# LANGUAGE RecordWildCards #-}
-{-# LANGUAGE NoFieldSelectors #-}
-
 module Main (main) where
 
+import Checked
+import Profile
 import Control.Exception
 import Control.Monad.Except
 import Data.Foldable
-import Data.Text qualified as T
 import System.Directory
 import System.Environment
 import System.FilePath
@@ -16,84 +13,9 @@ import System.Process
 import Text.Printf
 
 -- TODO Refactor
-
--- | Denotes executable on PATH.
-newtype Executable = Executable FilePath
+-- TODO Git clone? Less ergonomic for change. How to work with configs?
 
 type XMonad = Executable
-
--- | Profile ID, restricted names
-type ProfileID = String
-
--- | Build Info
-data BuildInfo = BuildInfo
-  { xmonadExe :: !String,
-    otherExes :: [String]
-  }
-  deriving (Read, Show)
-
--- | Profile Config
-data ProfileCfg = ProfileCfg
-  { profileID :: !ProfileID,
-    profileName :: !T.Text,
-    installScript :: !(Maybe FilePath),
-    builds :: !BuildInfo
-  }
-  deriving (Read, Show)
-
--- | Profile. Requires the config path to exist.
-data Profile = Profile
-  { profCfg :: !ProfileCfg,
-    cfgDir, dataDir, handleDir, cacheDir, logDir :: !FilePath,
-    starter :: !FilePath
-  }
-
-data ManageError
-  = ExeNotFound String
-  | ProfileNotFound ProfileID
-  | ProfileWrongFormat ProfileID String
-  deriving (Show)
-
-instance Exception ManageError
-
--- | Calls the executable.
-callExe :: Executable -> [String] -> IO ()
-callExe (Executable path) = callProcess path
-
--- | Converts executable to a createprocess.
-exeToProc :: Executable -> [String] -> CreateProcess
-exeToProc (Executable path) = proc path
-
--- | Set certain file to executable
-setToExecutable :: FilePath -> IO Executable
-setToExecutable path = do
-  perm <- getPermissions path
-  Executable path <$ setPermissions path (setOwnerExecutable True perm)
-
--- | Gets an executable.
-getExecutable :: String -> IO Executable
-getExecutable exe =
-  (findExecutable exe) >>= \case
-    Nothing -> throwIO (ExeNotFound exe)
-    Just path -> pure (Executable path)
-
--- | Gets a profile, or gives Nothing if not found.
-getProfile :: FilePath -> ProfileID -> IO Profile
-getProfile parent profID = do
-  doesDirectoryExist cfgDir >>= (`unless` throwIO (ProfileNotFound profID))
-  cfgStr <- readFile (cfgDir </> "profile.cfg")
-  profCfg <- case reads @ProfileCfg cfgStr of
-    [(cfg, "")] -> pure cfg -- TODO Use proper parser combinators
-    remaining -> throwIO (ProfileWrongFormat profID $ errMsg $ show remaining)
-  pure (Profile {profCfg, cfgDir, dataDir, handleDir, cacheDir, logDir, starter})
-  where
-    errMsg = printf "left while parsing: %s"
-    dataDir = parent </> "data" </> profID
-    cfgDir = parent </> profID
-    handleDir = parent </> "handle" </> profID
-    cacheDir = parent </> "cache" </> profID
-    logDir = parent </> "logs" </> profID
-    starter = parent </> "start.sh"
 
 -- | Initial installation.
 installInit :: Executable -> IO ()
@@ -110,9 +32,7 @@ installInit sudo = do
 -- | Installs a profile - first argument is sudo.
 installProfile :: Executable -> XMonad -> Profile -> IO ()
 installProfile sudo xmonad profile@Profile {..} = do
-  traverse_ (createDirectoryIfMissing True) [dataDir, handleDir, cacheDir, logDir]
-  installs <- traverse (setToExecutable . (cfgDir </>)) installScript
-  -- _ <- setToExecutable (cfgDir </> "build")
+  installs <- traverse (setToExecutable . (</>) cfgDir) installScript
   _ <- setToExecutable starter -- For now, let's set starter here
 
   curDir <- getCurrentDirectory
@@ -240,10 +160,9 @@ main = do
   where
     -- MAYBE Do these need to be here?
     handleError = \case
-      ExeNotFound exe -> hPrintf stderr "Error: Executable %s not found in PATH\n" exe
       ProfileNotFound profID -> hPrintf stderr "Error: Profile %s not found\n" profID
       ProfileWrongFormat profID cause -> do
         hPrintf stderr "Error: Profile %s cannot be read\n" profID
         hPrintf stderr "Cause: %s\n" cause
-        
+
         
