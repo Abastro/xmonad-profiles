@@ -11,19 +11,11 @@ import Control.Monad
 -- | Profile ID, restricted names
 type ProfileID = String
 
--- | Build Info
-data BuildInfo = BuildInfo
-  { xmonadExe :: !String,
-    otherExes :: [String]
-  }
-  deriving (Read, Show)
-
 -- | Profile Config
 data ProfileCfg = ProfileCfg
   { profileID :: !ProfileID,
     profileName :: !T.Text,
-    installScript :: !(Maybe FilePath),
-    builds :: !BuildInfo
+    installScript :: !(Maybe FilePath)
   }
   deriving (Read, Show)
 

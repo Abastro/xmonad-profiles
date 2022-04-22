@@ -12,8 +12,9 @@ import System.IO
 import System.Process
 import Text.Printf
 
--- TODO Refactor
--- TODO Git clone? Less ergonomic for change. How to work with configs?
+-- TODO Decide:
+-- Git clone is Less ergonomic for change.
+-- How to work with configs?
 
 type XMonad = Executable
 
@@ -65,33 +66,6 @@ installProfile sudo xmonad profile@Profile {..} = do
           printf "exec xmonad-manage build %s %s" profileID (show "$1")
         ]
 
--- | Builds certain profile, called by a build script.
-buildProfile :: FilePath -> Profile -> IO ()
-buildProfile xmonadDest Profile {profCfg, cfgDir, cacheDir} = withCurrentDirectory cfgDir $ do
-  printf "[build] Building config from directory %s\n" cfgDir
-  printf "[build] XMonad config destination %s\n" xmonadDest
-
-  cabal <- getExecutable "cabal"
-  -- Run build to check if it is updated
-  need <- withCreateProcess (exeToProc cabal $ "build" : targets) {std_out = CreatePipe} $
-    \_ (Just hout) _ _ -> do -- Let's assume stdout close = build end
-      hGetContents hout >>= \l -> ("Up to date" `notElem` lines l) <$ putStr l
-
-  -- If files are rebuilt, install it
-  when need $ do
-    ln <- getExecutable "ln"
-    callExe cabal ("install" : targets <> installOpts)
-    callExe ln ["-sf", cacheDir </> xmonadExe, xmonadDest]
-    callExe cabal ("build" : targets) -- Hack to reduce checking time
-  where
-    ProfileCfg {builds = BuildInfo {xmonadExe, otherExes}} = profCfg
-    targets = map ("exe:" <>) (xmonadExe : otherExes)
-    installOpts =
-      [ printf "--installdir=%s" cacheDir,
-        printf "--install-method=copy",
-        printf "--overwrite-policy=always"
-      ]
-
 -- | Runs xmonad for profile with given options.
 runXMonad :: XMonad -> Profile -> Bool -> [String] -> IO ()
 runXMonad xmonad Profile {dataDir, cfgDir, cacheDir, logDir} untilEnd opts = do
@@ -131,16 +105,11 @@ main = do
         join $ installProfile sudo <$> getExecutable "xmonad" <*> getProfile parent profID
         printf "[install %s] End\n" profID
 
-      -- Automatic profile build
-      ["build", profID, destFile] -> do
-        printf "[build %s %s] Begin\n" profID destFile
-        join $ buildProfile destFile <$> getProfile parent profID
-        printf "[build %s %s] End\n" profID destFile
-      -- Manual profile build
-      ["build", profID] -> do -- TODO Use binfilename instead (arch-os)
+      -- Manually build profile
+      ["build", profID] -> do
         printf "[build %s] Begin\n" profID
-        profile@Profile {cacheDir} <- getProfile parent profID
-        buildProfile (cacheDir </> "xmonad-x86_64-linux") profile
+        runXM <- runXMonad <$> getExecutable "xmonad" <*> getProfile parent profID
+        runXM True ["--recompile"]
         printf "[build %s] End\n" profID
 
       -- Automatic profile run
