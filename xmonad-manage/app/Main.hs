@@ -5,6 +5,7 @@ import Control.Exception
 import Control.Monad.Except
 import Data.Foldable
 import Data.Map.Strict qualified as M
+import Data.StateVar
 import Profile
 import System.Directory
 import System.Environment
@@ -26,7 +27,7 @@ data ManageSaved = ManageSaved
   deriving (Read, Show)
 
 data ManageEnv x = ManageEnv
-  { saved :: !ManageSaved,
+  { envPath :: !FilePath,
     xMonad :: !x,
     logger :: forall r. PrintfType r => String -> r
   }
@@ -35,9 +36,14 @@ data ManageEnv x = ManageEnv
 xmonadEnv :: ManageEnv () -> IO (ManageEnv XMonad)
 xmonadEnv env = (<$ env) <$> getExecutable "xmonad"
 
+varMS :: StateVar ManageSaved
+varMS = dataVar "xmonad-manage" "manage-data" $ do
+  managePath <- getCurrentDirectory
+  pure $ ManageSaved {managePath, profiles = M.empty}
+
 -- | Initial installation.
 installInit :: Executable -> ManageEnv () -> IO ()
-installInit sudo ManageEnv{logger} = do
+installInit sudo ManageEnv {logger} = do
   findExecutable "xmonad" >>= \case
     Just _ -> logger "xmonad found in PATH"
     Nothing -> callCommand "cabal install xmonad"
@@ -92,16 +98,18 @@ runXMonad ManageEnv {xMonad} Profile {dataDir, cfgDir, cacheDir, logDir} untilEn
 main :: IO ()
 main = do
   home <- getHomeDirectory
-  parent <- getCurrentDirectory
   (`catch` handleError) $ do
     args <- getArgs
+    saved <- get varMS
     let logger str = printf (printf "[%s] %s\n" (unwords args) str)
-        savedDat = ManageSaved {managePath = parent, profiles = M.empty}
-        mEnv = ManageEnv {saved = savedDat, xMonad = (), logger}
-        setupExe = parent </> "xmonad.setup"
+        ManageSaved {managePath = envPath} = saved
+        mEnv = ManageEnv {envPath, xMonad = (), logger}
+        setupExe = envPath </> "xmonad.setup"
     sudo <- getExecutable "sudo"
 
     case args of
+      -- Initiation run
+      [] -> logger "Successfully Installed"
       -- Main installation
       ["install"] -> do
         logger "Begin"
@@ -113,14 +121,14 @@ main = do
       ["install", ident] -> do
         profID <- makeIDIO ident
         logger "Begin"
-        join $ installProfile sudo <$> xmonadEnv mEnv <*> getProfile parent profID
+        join $ installProfile sudo <$> xmonadEnv mEnv <*> getProfile envPath profID
         logger "End"
 
       -- Manually build profile
       ["build", ident] -> do
         profID <- makeIDIO ident
         logger "Begin"
-        runXM <- runXMonad <$> xmonadEnv mEnv <*> getProfile parent profID
+        runXM <- runXMonad <$> xmonadEnv mEnv <*> getProfile envPath profID
         runXM True ["--recompile"]
         logger "End"
 
@@ -130,7 +138,7 @@ main = do
         logger "Setup"
         withCurrentDirectory home $ callProcess setupExe []
         logger "Booting xmonad"
-        runXM <- runXMonad <$> xmonadEnv mEnv <*> getProfile parent profID
+        runXM <- runXMonad <$> xmonadEnv mEnv <*> getProfile envPath profID
         withCurrentDirectory home $ runXM False []
         logger "Exit"
 

@@ -27,6 +27,7 @@ executable xmonad-manage
     , text ==2.0.*
     , process ==1.6.*
     , parsec  ==3.1.*
+    , StateVar ==1.2.*
   hs-source-dirs:   app
   default-language: GHC2021
   ghc-options:      -W
