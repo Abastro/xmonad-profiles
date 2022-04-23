@@ -119,14 +119,14 @@ main = do
 
       -- Profile-specific installation
       ["install", ident] -> do
-        profID <- makeIDIO ident
+        profID <- makeIDM ident
         logger "Begin"
         join $ installProfile sudo <$> xmonadEnv mEnv <*> getProfile envPath profID
         logger "End"
 
       -- Manually build profile
       ["build", ident] -> do
-        profID <- makeIDIO ident
+        profID <- makeIDM ident
         logger "Begin"
         runXM <- runXMonad <$> xmonadEnv mEnv <*> getProfile envPath profID
         runXM True ["--recompile"]
@@ -134,7 +134,7 @@ main = do
 
       -- Automatic profile run
       ["run", ident] -> do
-        profID <- makeIDIO ident
+        profID <- makeIDM ident
         logger "Setup"
         withCurrentDirectory home $ callProcess setupExe []
         logger "Booting xmonad"

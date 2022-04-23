@@ -10,7 +10,7 @@ module Checked
     ID,
     idStr,
     makeID,
-    makeIDIO
+    makeIDM
   )
 where
 
@@ -82,6 +82,8 @@ idStr = coerce
 makeID :: String -> Maybe ID
 makeID ident = ID ident <$ guard (all isAscii ident && all (not . isSpace) ident)
 
-makeIDIO :: String -> IO ID
-makeIDIO ident = maybe (ioError $ userError $ printf "Invalid ID %s" ident) pure $ makeID ident
+makeIDM :: MonadFail f => String -> f ID
+makeIDM ident = maybe (fail failMsg) pure $ makeID ident
+  where
+    failMsg = printf "ID contains illegal letter or spaces %s" ident
 

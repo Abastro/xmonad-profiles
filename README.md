@@ -39,3 +39,4 @@ which you can select from login screen.
 NB: Removal method is not yet supported; this is due to `cabal` lacking uninstall/gc methods.
 
 If you don't mind nuking the haskell stores, you can remove the `xmonad-profiles` directory and `$HOME/.ghcup`, `$HOME/.cabal` to do the cleanup.
+- Added: Also need to clean up `XDG_DATA_DIR/xmonad-manage`, but this folder contains a single small text data file.
