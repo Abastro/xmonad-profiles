@@ -102,7 +102,7 @@ main = do
     args <- getArgs
     saved <- get varMS
     let logger str = printf (printf "[%s] %s\n" (unwords args) str)
-        ManageSaved {managePath = envPath} = saved
+        ManageSaved {managePath = envPath, profiles} = saved
         mEnv = ManageEnv {envPath, xMonad = (), logger}
         setupExe = envPath </> "xmonad.setup"
     sudo <- getExecutable "sudo"
@@ -120,25 +120,30 @@ main = do
       -- Profile-specific installation
       ["install", ident] -> do
         profID <- makeIDM ident
+        let cfgPath = envPath </> ident
         logger "Begin"
-        join $ installProfile sudo <$> xmonadEnv mEnv <*> getProfile envPath profID
+        join $ installProfile sudo <$> xmonadEnv mEnv <*> getProfileFromPath envPath profID cfgPath
+        let update saved@ManageSaved {profiles} = saved {profiles = M.insert profID cfgPath profiles}
+        varMS $~ update -- update saved
         logger "End"
 
       -- Manually build profile
       ["build", ident] -> do
         profID <- makeIDM ident
+        cfgPath <- maybe (throwIO $ ProfileNotFound profID) pure $ profiles M.!? profID
         logger "Begin"
-        runXM <- runXMonad <$> xmonadEnv mEnv <*> getProfile envPath profID
+        runXM <- runXMonad <$> xmonadEnv mEnv <*> getProfileFromPath envPath profID cfgPath
         runXM True ["--recompile"]
         logger "End"
 
       -- Automatic profile run
       ["run", ident] -> do
         profID <- makeIDM ident
+        cfgPath <- maybe (throwIO $ ProfileNotFound profID) pure $ profiles M.!? profID
         logger "Setup"
         withCurrentDirectory home $ callProcess setupExe []
         logger "Booting xmonad"
-        runXM <- runXMonad <$> xmonadEnv mEnv <*> getProfile envPath profID
+        runXM <- runXMonad <$> xmonadEnv mEnv <*> getProfileFromPath envPath profID cfgPath
         withCurrentDirectory home $ runXM False []
         logger "Exit"
 

@@ -74,9 +74,9 @@ parseCfg = parse parserCfg "profile.cfg"
           caseSensitive = True
         }
 
--- | Gets a profile, or gives Nothing if not found.
-getProfile :: FilePath -> ID -> IO Profile
-getProfile parent profID = do
+-- | Gets a profile from specified path.
+getProfileFromPath :: FilePath -> ID -> FilePath -> IO Profile
+getProfileFromPath project profID cfgDir = do
   doesDirectoryExist cfgDir >>= (`unless` throwIO (ProfileNotFound profID))
   profCfg <-
     parseCfg <$> T.readFile (cfgDir </> "profile.cfg") >>= \case
@@ -84,8 +84,7 @@ getProfile parent profID = do
       Right cfg -> pure cfg
   pure (Profile {profCfg, cfgDir, dataDir, cacheDir, logDir, starter})
   where
-    dataDir = parent </> "data" </> idStr profID
-    cfgDir = parent </> idStr profID
-    cacheDir = parent </> "cache" </> idStr profID
-    logDir = parent </> "logs" </> idStr profID
-    starter = parent </> "start.sh"
+    dataDir = project </> "data" </> idStr profID
+    cacheDir = project </> "cache" </> idStr profID
+    logDir = project </> "logs" </> idStr profID
+    starter = project </> "start.sh"
