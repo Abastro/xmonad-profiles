@@ -1,5 +1,4 @@
 #!/bin/sh
-# Shared for Ubuntu
 
 # Load X resources
 xrdb -merge .Xresources

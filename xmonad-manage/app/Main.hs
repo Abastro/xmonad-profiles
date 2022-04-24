@@ -43,16 +43,14 @@ varMS = dataVar "xmonad-manage" "manage-data" $ do
   pure $ ManageSaved {managePath, profiles = M.empty}
 
 -- | Initial installation.
-installInit :: Executable -> ManageEnv () -> IO ()
-installInit sudo ManageEnv {logger} = do
+installInit :: ManageEnv () -> IO ()
+installInit ManageEnv {envPath, logger} = do
   findExecutable "xmonad" >>= \case
     Just _ -> logger "xmonad found in PATH"
     Nothing -> callCommand "cabal install xmonad"
 
-  callExe sudo (["apt", "install"] <> dependencies)
-  where
-    dependencies =
-      ["xcompmgr", "suckless-tools", "gnome-screensaver", "xss-lock", "gnome-keyring"]
+  reqs <- setToExecutable (envPath </> "commons" </> "startup-install.sh")
+  callExe reqs []
 
 -- | Installs a profile - first argument is sudo.
 installProfile :: Executable -> ManageEnv XMonad -> Profile -> IO ()
@@ -105,8 +103,7 @@ main = do
         mEnv = ManageEnv {envPath, xMonad = (), logger}
         getProfile profID =
           maybe (throwIO $ ProfileNotFound $ Right profID) pure $ profiles M.!? profID
-        setupExe = envPath </> "xmonad.setup"
-    sudo <- getExecutable "sudo"
+        setupExe = envPath </> "commons" </> "startup-run.sh"
 
     case args of
       -- Initiation run
@@ -115,7 +112,7 @@ main = do
       ["install"] -> do
         logger "Begin"
         setToExecutable setupExe
-        installInit sudo mEnv
+        installInit mEnv
         logger "End"
 
       -- Profile-specific installation
@@ -123,7 +120,7 @@ main = do
         logger "Begin"
         cfgPath <- canonicalizePath rawPath
         profile@Profile {profCfg = ProfileCfg {profileID}} <- getProfileFromPath envPath cfgPath
-        join $ installProfile sudo <$> xmonadEnv mEnv <*> pure profile
+        join $ installProfile <$> getExecutable "sudo" <*> xmonadEnv mEnv <*> pure profile
         let addProfile = M.insert profileID cfgPath
         -- update saved
         varMS $~ \saved@ManageSaved {profiles} -> saved {profiles = addProfile profiles}
