@@ -72,7 +72,7 @@ installProfile sudo mEnv profile@Profile {..} = do
           printf "Encoding=UTF-8",
           printf "Name=%s" profileName,
           printf "Comment=Xmonad profile %s" (idStr profileID),
-          printf "Exec=%s %s" (show starter) (idStr profileID),
+          printf "Exec=%s %s" starter (idStr profileID),
           printf "Type=XSession"
         ]
 

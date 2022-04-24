@@ -1,10 +1,17 @@
 #!/bin/sh
+# commons=$( dirname "$0" )
+
+# Monitor settings use xrandr
+xrandr
 
 # Load X resources
-xrdb -merge .Xresources
+xrdb -merge ~/.Xresources
 
 # To support transparency
-xcompmgr -n &
+# xcompmgr -n &
+
+# * picom is not available in 20.04 ubuntu repo. Use it if you could install.
+picom -bcCGf -D 4 -I 0.02 -O 0.02 -e 0.8
 
 # Starts ibus-daemon
 ibus-daemon -drx &
@@ -18,5 +25,7 @@ xss-lock -- gnome-screensaver -l &
 # Keyring-daemon for keys
 gnome-keyring-daemon --start --components=gpg,pkcs11,secrets,ssh
 
-# Monitor settings
-# xrandr --output eDP-1-0 --mode 1280x720 --scale 1x1
+
+# Set root cursor
+xsetroot -cursor_name left_ptr
+
