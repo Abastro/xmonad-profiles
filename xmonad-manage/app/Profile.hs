@@ -30,14 +30,15 @@ data Profile = Profile
   }
 
 data ProfileError
-  = ProfileNotFound ID
-  | ProfileWrongFormat ID String
+  = ProfileNotFound (Either FilePath ID)
+  | ProfileIOError FilePath IOError
+  | ProfileWrongFormat String
   deriving (Show)
 
 instance Exception ProfileError
 
-parseCfg :: T.Text -> Either ParseError ProfileCfg
-parseCfg = parse parserCfg "profile.cfg"
+parseCfg :: FilePath -> T.Text -> Either ParseError ProfileCfg
+parseCfg cfgPath = parse parserCfg cfgPath
   where
     parserCfg :: Parsec T.Text () ProfileCfg
     parserCfg =
@@ -47,7 +48,8 @@ parseCfg = parse parserCfg "profile.cfg"
               <$> field "profileID" parserID
               <*> (comma cfgLang *> field "profileName" parserText)
               <*> (comma cfgLang *> field "installScript" (parserMaybe parserPath))
-          ) <* eof
+          )
+          <* eof
           <?> "Profile configuration"
 
     expect str = try $ do s <- identifier cfgLang; guard (s == str)
@@ -75,16 +77,19 @@ parseCfg = parse parserCfg "profile.cfg"
         }
 
 -- | Gets a profile from specified path.
-getProfileFromPath :: FilePath -> ID -> FilePath -> IO Profile
-getProfileFromPath project profID cfgDir = do
-  doesDirectoryExist cfgDir >>= (`unless` throwIO (ProfileNotFound profID))
-  profCfg <-
-    parseCfg <$> T.readFile (cfgDir </> "profile.cfg") >>= \case
-      Left err -> throwIO (ProfileWrongFormat profID $ show err)
+getProfileFromPath :: FilePath -> FilePath -> IO Profile
+getProfileFromPath project cfgDir = do
+  doesDirectoryExist cfgDir >>= (`unless` throwIO (ProfileNotFound $ Left cfgDir))
+  cfgTxt <- catch @IOError (T.readFile cfgLoc) $ throwIO . ProfileIOError cfgDir
+
+  profCfg@ProfileCfg {profileID} <-
+    case parseCfg cfgLoc cfgTxt of
+      Left err -> throwIO (ProfileWrongFormat $ show err)
       Right cfg -> pure cfg
+
+  let [dataDir, cacheDir, logDir] = locFor profileID <$> ["data", "cache", "logs"]
   pure (Profile {profCfg, cfgDir, dataDir, cacheDir, logDir, starter})
   where
-    dataDir = project </> "data" </> idStr profID
-    cacheDir = project </> "cache" </> idStr profID
-    logDir = project </> "logs" </> idStr profID
+    cfgLoc = cfgDir </> "profile.cfg"
+    locFor ident str = project </> str </> idStr ident
     starter = project </> "start.sh"
