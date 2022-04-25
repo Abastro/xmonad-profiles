@@ -15,6 +15,7 @@ executable xmonad-manage
     Checked
     Config
     Profile
+    Startup
   default-extensions:
     LambdaCase
     RecordWildCards

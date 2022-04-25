@@ -1,6 +1,9 @@
 -- | Configurations based on haskell syntax
 module Config
-  ( fieldP,
+  ( Parsec,
+    ParseError,
+    parse,
+    fieldP,
     recordP,
     textP,
     pathP,

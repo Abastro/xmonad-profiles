@@ -6,7 +6,9 @@ import Control.Monad.Except
 import Data.Foldable
 import Data.Map.Strict qualified as M
 import Data.StateVar
+import Data.Text qualified as T
 import Profile
+import Startup
 import System.Directory
 import System.Environment
 import System.Exit
@@ -29,7 +31,6 @@ data ManageSaved = ManageSaved
 
 data ManageEnv x = ManageEnv
   { envPath :: !FilePath,
-    startupDir :: !FilePath,
     xMonad :: !x,
     logger :: forall r. PrintfType r => String -> r
   }
@@ -44,19 +45,19 @@ varMS = dataVar "xmonad-manage" "manage-data" $ do
   pure $ ManageSaved {managePath, profiles = M.empty}
 
 -- | Initial installation.
-installInit :: ManageEnv () -> IO ()
-installInit ManageEnv {startupDir, logger} = do
+installInit :: ManageEnv () -> Startup -> IO ()
+installInit ManageEnv {logger} Startup {..} = do
   findExecutable "xmonad" >>= \case
     Just _ -> logger "xmonad found in PATH"
     Nothing -> callCommand "cabal install xmonad"
 
-  reqs <- setToExecutable (startupDir </> "startup-install.sh")
+  [reqs, _] <- traverse setToExecutable [startInstall, startRun]
   callExe reqs []
 
 -- | Installs a profile - first argument is sudo.
 installProfile :: Executable -> ManageEnv XMonad -> Profile -> IO ()
 installProfile sudo mEnv profile@Profile {..} = do
-  installs <- traverse (setToExecutable . (</>) cfgDir) installScript
+  installs <- traverse setToExecutable profInstall
   _ <- setToExecutable starter -- For now, let's set starter here
   writeFile runnerPath (runner starter)
   callExe sudo ["ln", "-sf", runnerPath, runnerLinked]
@@ -64,16 +65,15 @@ installProfile sudo mEnv profile@Profile {..} = do
   traverse_ (`callExe` []) installs
   runXMonad mEnv profile True ["--recompile"]
   where
-    ProfileCfg {profileID, profileName, installScript} = profCfg
-    runnerLinked = "/usr" </> "share" </> "xsessions" </> idStr profileID <.> "desktop"
+    runnerLinked = "/usr" </> "share" </> "xsessions" </> idStr profID <.> "desktop"
     runnerPath = dataDir </> "run" <.> "desktop"
     runner starter =
       unlines
         [ printf "[Desktop Entry]",
           printf "Encoding=UTF-8",
-          printf "Name=%s" profileName,
-          printf "Comment=Xmonad profile %s" (idStr profileID),
-          printf "Exec=%s %s" starter (idStr profileID),
+          printf "Name=%s" profName,
+          printf "Comment=Xmonad profile %s" (idStr profID),
+          printf "Exec=%s %s" starter (idStr profID),
           printf "Type=XSession"
         ]
 
@@ -101,11 +101,10 @@ main = do
     saved <- get varMS
     let logger str = printf (printf "[%s] %s\n" (unwords args) str)
         ManageSaved {managePath = envPath, profiles} = saved
-        startupDir = envPath </> "commons"
-        mEnv = ManageEnv {envPath, startupDir, xMonad = (), logger}
+        mEnv = ManageEnv {envPath, xMonad = (), logger}
         getProfile profID =
           maybe (throwIO $ ProfileNotFound $ Right profID) pure $ profiles M.!? profID
-        setupRun = startupDir </> "startup-run.sh"
+        startupDir = envPath </> "commons"
 
     case args of
       -- Initiation run
@@ -113,17 +112,16 @@ main = do
       -- Main installation
       ["install"] -> do
         logger "Begin"
-        setToExecutable setupRun
-        installInit mEnv
+        join $ installInit mEnv <$> getStartup startupDir
         logger "End"
 
       -- Profile-specific installation
       ["install", rawPath] -> do
         logger "Begin"
         cfgPath <- canonicalizePath rawPath
-        profile@Profile {profCfg = ProfileCfg {profileID}} <- getProfileFromPath envPath cfgPath
+        profile@Profile {profID} <- getProfileFromPath envPath cfgPath
         join $ installProfile <$> getExecutable "sudo" <*> xmonadEnv mEnv <*> pure profile
-        let addProfile = M.insert profileID cfgPath
+        let addProfile = M.insert profID cfgPath
         -- update saved
         varMS $~ \saved@ManageSaved {profiles} -> saved {profiles = addProfile profiles}
         logger "End"
@@ -143,7 +141,9 @@ main = do
         cfgPath <- getProfile profID
         logger "Setup"
         withCurrentDirectory home $ do
-          callProcess setupRun []
+          Startup {..} <- getStartup startupDir
+          callProcess startRun []
+          traverse_ (uncurry setEnv) (M.toList $ T.unpack <$> startEnv)
         logger "Booting xmonad"
         runXM <- runXMonad <$> xmonadEnv mEnv <*> getProfileFromPath envPath cfgPath
         withCurrentDirectory home $ runXM False []
