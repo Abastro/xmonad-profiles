@@ -62,8 +62,11 @@ installInit ManageEnv {logger} Startup {..} = do
 installProfile :: Executable -> ManageEnv XMonad -> Profile -> IO ()
 installProfile sudo mEnv profile@Profile {..} = do
   installs <- traverse setToExecutable profInstall
-  _ <- setToExecutable starter -- For now, let's set starter here
-  writeFile runnerPath (runner starter)
+
+  writeFile startPath startScript
+  _ <- setToExecutable startPath
+
+  writeFile runnerPath runner
   callExe sudo ["ln", "-sf", runnerPath, runnerLinked]
 
   traverse_ (`callExe` []) installs
@@ -71,14 +74,26 @@ installProfile sudo mEnv profile@Profile {..} = do
   where
     runnerLinked = "/usr" </> "share" </> "xsessions" </> idStr profID <.> "desktop"
     runnerPath = dataDir </> "run" <.> "desktop"
-    runner starter =
+    runner =
       unlines
         [ printf "[Desktop Entry]",
           printf "Encoding=UTF-8",
           printf "Name=%s" profName,
           printf "Comment=Xmonad profile %s" (idStr profID),
-          printf "Exec=%s %s" starter (idStr profID),
+          printf "Exec=%s" startPath,
           printf "Type=XSession"
+        ]
+
+    startPath = dataDir </> "starter.sh"
+    startScript =
+      unlines
+        [ printf "#!/bin/sh",
+          printf "export PATH=$HOME/.cabal/bin:$HOME/.ghcup/bin:$PATH",
+          printf
+            "exec xmonad-manage run %s > %s 2> %s"
+            (idStr profID)
+            (show $ logDir </> "start.log")
+            (show $ logDir </> "start.err")
         ]
 
 -- | Runs xmonad for profile with given options.
