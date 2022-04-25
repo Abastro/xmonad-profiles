@@ -15,8 +15,8 @@ picom -bcCGf -D 4 -I 0.02 -O 0.02 -e 0.8
 # ibus-daemon provides ibus input handling
 ibus-daemon -drx &
 
-# xss-lock handles locking on e.g. lid close
-xss-lock -- dm-tool lock &
+# locker dedicated for lightdm
+light-locker &
 
 # Keyring-daemon for e.g. ssh keys
 gnome-keyring-daemon --start --components=gpg,pkcs11,secrets,ssh

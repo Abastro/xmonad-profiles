@@ -158,6 +158,7 @@ main = do
         startupDir <- canonicalizePath rawPath
         getStartup startupDir -- Checks if startup directory is valid
         varMS $~ \saved -> saved {startupDir}
+        logger "Startup manage directory set to %s" startupDir
         logger "End"
 
       -- Illegal Arguments
