@@ -1,13 +1,13 @@
 # Xmonad profile manager for Gnome
 
-More easily manageable xmonad profiles on Gnome.
+More easily manageable xmonad profiles on Ubuntu.
 
 NB: Only works for the listed submodules.
 
 ## Installation
 
 Requires:
-- Gnome desktop environment (Some parts of it, e.g. `apt`)
+- Ubuntu with Gnome desktop environment
 - [Git](https://git-scm.com/) for cloning
 - [GHCup](https://www.haskell.org/ghcup/)
 - [Cabal](https://www.haskell.org/cabal/), preferably installed via GHCup

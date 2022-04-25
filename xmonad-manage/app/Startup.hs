@@ -12,21 +12,21 @@ data Startup = Startup
     startEnv :: !(M.Map String T.Text)
   }
 
-parseStart :: FilePath -> T.Text -> Either ParseError Startup
-parseStart path = parse startP path
+parseStart :: FilePath -> FilePath -> T.Text -> Either ParseError Startup
+parseStart parent = parse startP
   where
     startP =
       completeP . recordP "Startup" $
         Startup
-          <$> fieldP "startInstall" ((</>) path <$> pathP)
-          <*> fieldP "startRun" ((</>) path <$> pathP)
-          <*> fieldP "startEnv" (mapP textP)
+          <$> fieldP "startInstall" ((</>) parent <$> pathP)
+          <*> (commaP *> fieldP "startRun" ((</>) parent <$> pathP))
+          <*> (commaP *> fieldP "startEnv" (mapP textP))
 
 -- | Gets startup from path
 getStartup :: FilePath -> IO Startup
 getStartup startupDir = do
   startupTxt <- T.readFile startupLoc
-  case parseStart startupLoc startupTxt of
+  case parseStart startupDir startupLoc startupTxt of
     Left err -> fail (show err)
     Right st -> pure st
   where

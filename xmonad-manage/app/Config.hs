@@ -68,7 +68,7 @@ cfgLang = P.makeTokenParser cfgLangDef
           commentLine = "#",
           nestedComments = True,
           identStart = letter,
-          identLetter = alphaNum,
+          identLetter = alphaNum <|> oneOf "_'",
           opStart = P.opLetter cfgLangDef,
           opLetter = oneOf "=",
           reservedNames = [],
