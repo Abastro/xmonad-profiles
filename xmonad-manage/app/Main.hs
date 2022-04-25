@@ -29,6 +29,7 @@ data ManageSaved = ManageSaved
 
 data ManageEnv x = ManageEnv
   { envPath :: !FilePath,
+    startupDir :: !FilePath,
     xMonad :: !x,
     logger :: forall r. PrintfType r => String -> r
   }
@@ -44,12 +45,12 @@ varMS = dataVar "xmonad-manage" "manage-data" $ do
 
 -- | Initial installation.
 installInit :: ManageEnv () -> IO ()
-installInit ManageEnv {envPath, logger} = do
+installInit ManageEnv {startupDir, logger} = do
   findExecutable "xmonad" >>= \case
     Just _ -> logger "xmonad found in PATH"
     Nothing -> callCommand "cabal install xmonad"
 
-  reqs <- setToExecutable (envPath </> "commons" </> "startup-install.sh")
+  reqs <- setToExecutable (startupDir </> "startup-install.sh")
   callExe reqs []
 
 -- | Installs a profile - first argument is sudo.
@@ -100,10 +101,11 @@ main = do
     saved <- get varMS
     let logger str = printf (printf "[%s] %s\n" (unwords args) str)
         ManageSaved {managePath = envPath, profiles} = saved
-        mEnv = ManageEnv {envPath, xMonad = (), logger}
+        startupDir = envPath </> "commons"
+        mEnv = ManageEnv {envPath, startupDir, xMonad = (), logger}
         getProfile profID =
           maybe (throwIO $ ProfileNotFound $ Right profID) pure $ profiles M.!? profID
-        setupExe = envPath </> "commons" </> "startup-run.sh"
+        setupRun = startupDir </> "startup-run.sh"
 
     case args of
       -- Initiation run
@@ -111,7 +113,7 @@ main = do
       -- Main installation
       ["install"] -> do
         logger "Begin"
-        setToExecutable setupExe
+        setToExecutable setupRun
         installInit mEnv
         logger "End"
 
@@ -140,7 +142,8 @@ main = do
         profID <- makeIDM ident
         cfgPath <- getProfile profID
         logger "Setup"
-        withCurrentDirectory home $ callProcess setupExe []
+        withCurrentDirectory home $ do
+          callProcess setupRun []
         logger "Booting xmonad"
         runXM <- runXMonad <$> xmonadEnv mEnv <*> getProfileFromPath envPath cfgPath
         withCurrentDirectory home $ runXM False []

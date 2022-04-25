@@ -1,18 +1,15 @@
 module Profile where
 
 import Checked
-import Control.Applicative
+import Config
 import Control.Exception hiding (try)
 import Control.Monad
-import Control.Monad.Identity
 import Data.Text qualified as T
 import Data.Text.IO qualified as T
 import System.Directory
 import System.FilePath
-import Text.Parsec (ParseError, Parsec, alphaNum, letter, oneOf, parse, try, (<?>))
-import Text.Parsec.Combinator
-import Text.Parsec.Token
-import Text.Printf
+import Text.Parsec (ParseError, Parsec, parse)
+
 
 -- | Profile Config
 data ProfileCfg = ProfileCfg
@@ -42,39 +39,11 @@ parseCfg cfgPath = parse parserCfg cfgPath
   where
     parserCfg :: Parsec T.Text () ProfileCfg
     parserCfg =
-      whiteSpace cfgLang *> expect "ProfileCfg"
-        *> (braces cfgLang)
-          ( ProfileCfg
-              <$> field "profileID" parserID
-              <*> (comma cfgLang *> field "profileName" parserText)
-              <*> (comma cfgLang *> field "installScript" (parserMaybe parserPath))
-          )
-          <* eof
-          <?> "Profile configuration"
-
-    expect str = try $ do s <- identifier cfgLang; guard (s == str)
-    field str p = expect str *> reservedOp cfgLang "=" *> p <?> printf "Field %s" str
-    parserID = stringLiteral cfgLang >>= makeIDM
-    parserText = T.pack <$> stringLiteral cfgLang -- MAYBE not rely on String
-    parserMaybe p = expect "Just" *> (Just <$> p) <|> Nothing <$ expect "Nothing"
-    parserPath = stringLiteral cfgLang
-
-    cfgLang :: GenTokenParser T.Text () Identity
-    cfgLang = makeTokenParser cfgLangDef
-    cfgLangDef =
-      LanguageDef
-        { commentStart = "{-",
-          commentEnd = "-}",
-          commentLine = "#",
-          nestedComments = True,
-          identStart = letter,
-          identLetter = alphaNum,
-          opStart = opLetter cfgLangDef,
-          opLetter = oneOf "=",
-          reservedNames = [],
-          reservedOpNames = ["="],
-          caseSensitive = True
-        }
+      completeP . recordP "ProfileCfg" $
+        ( ProfileCfg <$> fieldP "profileID" identP
+            <*> (commaP *> fieldP "profileName" textP)
+            <*> (commaP *> fieldP "installScript" (maybeP pathP))
+        )
 
 -- | Gets a profile from specified path.
 getProfileFromPath :: FilePath -> FilePath -> IO Profile

@@ -7,7 +7,6 @@ export PATH="$HOME/.cabal/bin":"$HOME/.ghcup/bin":"$PATH"
 
 # TODO Ubuntu notification setup
 
-# TODO Move this out to personal config thing
 # Config ibus
 export GTK_IM_MODULE=ibus
 export XMODIFIERS=@im=ibus
