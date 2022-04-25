@@ -23,9 +23,12 @@ import Text.Printf
 
 type XMonad = Executable
 
+-- Startup is manually switched. For now.
+-- TODO Read/Show is not flexible enough; enable incremental read/show
 data ManageSaved = ManageSaved
   { managePath :: !FilePath,
-    profiles :: !(M.Map ID FilePath)
+    profiles :: !(M.Map ID FilePath),
+    startupDir :: !FilePath
   }
   deriving (Read, Show)
 
@@ -41,8 +44,9 @@ xmonadEnv env = (<$ env) <$> getExecutable "xmonad"
 
 varMS :: StateVar ManageSaved
 varMS = dataVar "xmonad-manage" "manage-data" $ do
+  putStrLn "Manager path not yet specified, setting to current directory"
   managePath <- getCurrentDirectory
-  pure $ ManageSaved {managePath, profiles = M.empty}
+  pure $ ManageSaved {managePath, profiles = M.empty, startupDir = managePath </> "start-basic"}
 
 -- | Initial installation.
 installInit :: ManageEnv () -> Startup -> IO ()
@@ -100,11 +104,10 @@ main = do
     args <- getArgs
     saved <- get varMS
     let logger str = printf (printf "[%s] %s\n" (unwords args) str)
-        ManageSaved {managePath = envPath, profiles} = saved
+        ManageSaved {managePath = envPath, profiles, startupDir} = saved
         mEnv = ManageEnv {envPath, xMonad = (), logger}
         getProfile profID =
           maybe (throwIO $ ProfileNotFound $ Right profID) pure $ profiles M.!? profID
-        startupDir = envPath </> "commons"
 
     case args of
       -- Initiation run
@@ -148,6 +151,14 @@ main = do
         runXM <- runXMonad <$> xmonadEnv mEnv <*> getProfileFromPath envPath cfgPath
         withCurrentDirectory home $ runXM False []
         logger "Exit"
+
+      -- Change startup
+      ["startup", rawPath] -> do
+        logger "Begin"
+        startupDir <- canonicalizePath rawPath
+        getStartup startupDir -- Checks if startup directory is valid
+        varMS $~ \saved -> saved {startupDir}
+        logger "End"
 
       -- Illegal Arguments
       args -> do

@@ -25,6 +25,8 @@ import Data.StateVar
 import Control.Applicative
 import Text.Read
 import System.FilePath
+import System.IO
+import Control.Exception
 
 -- | Denotes executable on PATH.
 newtype Executable = Executable FilePath
@@ -56,10 +58,10 @@ dataVar appName loc mkDef = makeStateVar load save
   where
     load = do
       msave <- datPath
-      (readMaybe <$> readFile msave) <|> pure Nothing >>= \case
+      let readAsA = withFile msave ReadMode (evaluate <=< fmap readMaybe . hGetContents)
+      readAsA <|> pure Nothing >>= \case
         Just saved -> pure saved
         Nothing -> do
-          putStrLn "Manager path not yet specified, setting to current directory"
           defVal <- mkDef
           defVal <$ writeFile msave (show defVal)
     save saved = do

@@ -10,9 +10,7 @@ cp -T "$parent/.Xresources" "$HOME/.Xresources"
 xrdb -merge ~/.Xresources
 
 # To support transparency
-# xcompmgr -n &
-# * picom is not available in 20.04 ubuntu repo. Use it if you could install.
-picom -bcCGf -D 4 -I 0.02 -O 0.02 -e 0.8
+xcompmgr -n &
 
 # Starts ibus-daemon
 ibus-daemon -drx &
@@ -21,6 +19,7 @@ ibus-daemon -drx &
 xscreensaver -no-splash &
 
 # Starts xss-lock
+# TODO Move to using DM's solution
 xss-lock -- xscreensaver-command -lock &
 
 # Keyring-daemon for keys
