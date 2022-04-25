@@ -19,7 +19,6 @@ ibus-daemon -drx &
 xscreensaver -no-splash &
 
 # Starts xss-lock
-# TODO Move to using DM's solution
 xss-lock -- xscreensaver-command -lock &
 
 # Keyring-daemon for keys
