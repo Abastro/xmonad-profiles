@@ -1,26 +1,27 @@
 #!/bin/sh
-# commons=$( dirname "$0" )
+parent=$( dirname "$0" )
 
 # Monitor settings use xrandr
 xrandr
 
+# Copy X resources
+cp -T "$parent/.Xresources" "$HOME/.Xresources"
 # Load X resources
 xrdb -merge ~/.Xresources
 
 # To support transparency
 # xcompmgr -n &
-
 # * picom is not available in 20.04 ubuntu repo. Use it if you could install.
 picom -bcCGf -D 4 -I 0.02 -O 0.02 -e 0.8
 
 # Starts ibus-daemon
 ibus-daemon -drx &
 
-# Starts gnome-screensaver
-gnome-screensaver &
+# Starts xscreensaver
+xscreensaver -no-splash &
 
 # Starts xss-lock
-xss-lock -- gnome-screensaver -l &
+xss-lock -- xscreensaver-command -lock &
 
 # Keyring-daemon for keys
 gnome-keyring-daemon --start --components=gpg,pkcs11,secrets,ssh

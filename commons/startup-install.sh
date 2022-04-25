@@ -1,6 +1,6 @@
 #!/bin/sh
 
-echo "Installs xcompmgr, suckless-tools, gnome-screensaver, xss-lock, gnome-keyring"
+echo "Installs xcompmgr, suckless-tools, xscreensaver, xss-lock, gnome-keyring"
 
 # Install necessary components
-sudo apt install xcompmgr suckless-tools gnome-screensaver xss-lock gnome-keyring
+sudo apt install xcompmgr suckless-tools xscreensaver xss-lock gnome-keyring
