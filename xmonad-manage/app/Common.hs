@@ -1,7 +1,7 @@
 {-# LANGUAGE DerivingStrategies #-}
 
 -- | Checked stuffs.
-module Checked
+module Common
   ( Executable,
     callExe,
     exeToProc,

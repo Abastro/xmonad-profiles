@@ -16,7 +16,7 @@ module Config
   )
 where
 
-import Checked
+import Common
 import Control.Monad.Identity
 import Data.Map qualified as M
 import Data.Text qualified as T
