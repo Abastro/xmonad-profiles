@@ -56,8 +56,9 @@ getExecutable exe =
 
 mayExecutable :: FilePath -> IO (Maybe Executable)
 mayExecutable path = do
-  canPath <- canonicalizePath path
-  coerce $ findFileWith (fmap executable . getPermissions) ["/"] canPath
+  absPath <- canonicalizePath path
+  found <- findFileWith (fmap executable . getPermissions) ["/"] absPath
+  pure $ coerce path <$ found -- Want symlink-included path anyway
 
 
 -- Not really checked, but anyway
