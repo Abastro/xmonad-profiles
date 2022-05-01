@@ -2,33 +2,39 @@ module Profile where
 
 import Common
 import Config
-import Control.Exception hiding (try)
+import Control.Exception
 import Control.Monad
+import Data.Foldable
 import Data.Text qualified as T
 import Data.Text.IO qualified as T
-import System.Directory
-import System.FilePath
-import System.Info (arch, os)
-import Text.Printf
 import Manages
-import System.Process
+import System.Directory
 import System.Environment
+import System.FilePath
 import System.IO
-import Data.Foldable
+import System.Info (arch, os)
+import System.Process
+import Text.Printf
+
+-- | Profile Properties
+data ProfileProps = ProfileProps
+  { profileName :: !T.Text,
+    profileDetails :: !T.Text,
+    profileIcon :: !(Maybe FilePath)
+  }
 
 -- | Profile Config
 data ProfileCfg = ProfileCfg
   { profileID :: !ID,
-    profileName :: !T.Text,
+    profileProps :: !ProfileProps,
     installScript :: !(Maybe FilePath),
     buildOnStart :: Bool
   }
-  deriving (Read, Show)
 
 -- | Profile. Requires the config path to exist.
 data Profile = Profile
   { profID :: !ID,
-    profName :: !T.Text,
+    profProps :: !ProfileProps,
     profInstall :: !(Maybe Executable),
     xmonadExe :: !Executable,
     cfgDir, dataDir, cacheDir, logDir :: !FilePath
@@ -43,14 +49,21 @@ data ProfileError
 instance Exception ProfileError
 
 parseCfg :: FilePath -> T.Text -> Either ParseError ProfileCfg
-parseCfg =
-  parse $
-    completeP . recordP "ProfileCfg" $
-      ProfileCfg
-        <$> fieldP "profileID" identP
-        <*> (commaP *> fieldP "profileName" textP)
-        <*> (commaP *> fieldP "installScript" (maybeP pathP))
-        <*> (commaP *> fieldP "buildOnStart" boolP)
+parseCfg = parse (completeP cfgP)
+  where
+    cfgP =
+      recordP "ProfileCfg" $
+        ProfileCfg
+          <$> fieldP "ID" identP
+          <*> (commaP *> fieldP "properties" propsP)
+          <*> (commaP *> fieldP "installScript" (maybeP pathP))
+          <*> (commaP *> fieldP "buildOnStart" boolP)
+    propsP =
+      recordP "ProfileProps" $
+        ProfileProps
+          <$> fieldP "name" textP
+          <*> (commaP *> fieldP "details" textP)
+          <*> (commaP *> fieldP "icon" (maybeP pathP))
 
 -- | Gets a profile from specified path.
 getProfileFromPath :: FilePath -> FilePath -> IO Profile
@@ -61,15 +74,14 @@ getProfileFromPath project cfgDir = do
     Left err -> throwIO (ProfileWrongFormat $ show err)
     Right cfg -> pure cfg
 
-  let (profID, profName) = (profileID, profileName)
-      installPath = (</>) cfgDir <$> installScript
+  let installPath = (</>) cfgDir <$> installScript
       [dataDir, cacheDir, logDir] = locFor profileID <$> ["data", "cache", "logs"]
       customPath = cacheDir </> printf "xmonad-%s-%s" arch os
 
   profInstall <- traverse setToExecutable installPath
   customExe <- if buildOnStart then pure Nothing else mayExecutable customPath
   xmonadExe <- maybe (getExecutable "xmonad") pure customExe
-  pure (Profile {..})
+  pure (Profile {profID = profileID, profProps = profileProps, ..})
   where
     cfgLoc = cfgDir </> "profile.cfg"
     locFor ident str = project </> str </> idStr ident
@@ -80,7 +92,7 @@ installProfile mEnv profile@Profile {..} sudo = do
   writeFile startPath startScript
   _ <- setToExecutable startPath
 
-  writeFile runnerPath runner
+  writeFile runnerPath (runner profProps)
   callExe sudo ["ln", "-sf", runnerPath, runnerLinked]
 
   traverse_ (`callExe` []) profInstall
@@ -88,14 +100,15 @@ installProfile mEnv profile@Profile {..} sudo = do
   where
     runnerLinked = "/usr" </> "share" </> "xsessions" </> idStr profID <.> "desktop"
     runnerPath = dataDir </> "run" <.> "desktop"
-    runner =
+    runner ProfileProps {..} =
       unlines
         [ printf "[Desktop Entry]",
           printf "Encoding=UTF-8",
-          printf "Name=%s" profName,
-          printf "Comment=Xmonad profile %s" (idStr profID),
+          printf "Name=%s" profileName,
+          printf "Comment=%s" profileDetails,
           printf "Exec=%s" startPath,
-          printf "Type=XSession"
+          printf "Type=XSession",
+          maybe "" (printf "Icon=%s" . (cfgDir </>)) profileIcon
         ]
 
     startPath = dataDir </> "starter.sh"

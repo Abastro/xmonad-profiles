@@ -5,7 +5,6 @@ import Control.Exception
 import Data.Foldable
 import Data.Map.Strict qualified as M
 import Data.StateVar
-import Data.Text qualified as T
 import Manages
 import Options.Applicative qualified as Opts
 import Profile
@@ -21,9 +20,7 @@ import Text.Printf
 -- Git clone is Less ergonomic for change.
 -- How to work with configs?
 
--- Startup is manually switched for now.
 -- TODO Read/Show is not flexible enough; enable incremental read/show
--- TODO Profile Images & Comments
 
 data Action
   = Update
@@ -60,6 +57,7 @@ manageOpts =
         Opts.command "run" $
           Opts.info (RunProf <$> profIdArg) $
             Opts.progDesc "Runs a profile",
+        -- Startup is manually switched for now.
         Opts.command "startup" $
           Opts.info (ChangeStart <$> pathArg "<startup-path>") $
             Opts.progDesc "Change startup setups"
@@ -102,8 +100,9 @@ main = do
       ListProf -> do
         logger "Available profiles:"
         for_ (M.elems profiles) $ \cfgPath -> do
-          Profile {profID, profName} <- getProfileFromPath envPath cfgPath
-          printf "- %s (%s)\n" (idStr profID) (T.unpack profName)
+          Profile {profID, profProps = ProfileProps {..}} <- getProfileFromPath envPath cfgPath
+          printf "- %s (%s)\n" (idStr profID) profileName
+          printf "    %s\n" profileDetails
 
       -- Profile-specific installation
       InstallProf rawPath -> do
