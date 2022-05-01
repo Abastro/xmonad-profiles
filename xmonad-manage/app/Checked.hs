@@ -99,4 +99,4 @@ makeID ident = ID ident <$ guard (all isAscii ident && all (not . isSpace) ident
 makeIDM :: MonadFail f => String -> f ID
 makeIDM ident = maybe (fail failMsg) pure $ makeID ident
   where
-    failMsg = printf "ID contains illegal letter or spaces %s" ident
+    failMsg = printf "ID contains illegal letter or spaces: %s" ident

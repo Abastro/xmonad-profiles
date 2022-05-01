@@ -11,8 +11,6 @@ import System.FilePath
 import Text.Printf
 import System.Info (arch, os)
 
--- TODO Profile images
-
 -- | Profile Config
 data ProfileCfg = ProfileCfg
   { profileID :: !ID,

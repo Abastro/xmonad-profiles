@@ -7,6 +7,7 @@ import Data.Foldable
 import Data.Map.Strict qualified as M
 import Data.StateVar
 import Data.Text qualified as T
+import Options.Applicative qualified as Opts
 import Profile
 import Startup
 import System.Directory
@@ -24,6 +25,8 @@ import Text.Printf
 -- Startup is manually switched. For now.
 -- TODO Refactor ManageSaved out
 -- TODO Read/Show is not flexible enough; enable incremental read/show
+-- TODO Profile Images
+
 data ManageSaved = ManageSaved
   { managePath :: !FilePath,
     profiles :: !(M.Map ID FilePath),
@@ -104,31 +107,74 @@ runXMonad ManageEnv {logger} Profile {xmonadExe, dataDir, cfgDir, cacheDir, logD
   where
     openLog name = openFile (logDir </> name) WriteMode
 
+data Action
+  = Setup
+  | ListProf
+  | InstallProf FilePath
+  | BuildProf ID
+  | RunProf ID
+  | ChangeStart FilePath
+
+optPrefs :: Opts.ParserPrefs
+optPrefs = Opts.prefs Opts.showHelpOnEmpty
+
+-- NOTE Completer doesn't work, maybe remove it?
+manageOpts :: Opts.ParserInfo Action
+manageOpts =
+  (`Opts.info` Opts.fullDesc) . Opts.hsubparser $
+    mconcat
+      [ Opts.command "setup" $
+          Opts.info (pure Setup) $
+            Opts.progDesc "Sets up common components, including XMonad",
+        Opts.command "list" $
+          Opts.info (pure ListProf) $
+            Opts.progDesc "Lists installed profiles",
+        Opts.command "install" $
+          Opts.info (InstallProf <$> pathArg "<profile-path>") $
+            Opts.progDesc "Installs a profile",
+        Opts.command "build" $
+          Opts.info (BuildProf <$> profIdArg) $
+            Opts.progDesc "Builds a profile manually",
+        Opts.command "run" $
+          Opts.info (RunProf <$> profIdArg) $
+            Opts.progDesc "Runs a profile",
+        Opts.command "startup" $
+          Opts.info (ChangeStart <$> pathArg "<startup-path>") $
+            Opts.progDesc "Change startup setups"
+      ]
+  where
+    pathArg name = Opts.strArgument $ Opts.metavar name <> Opts.action "directory"
+    profIdArg = Opts.argument (Opts.str >>= makeIDM) $ Opts.metavar "<profile-id>"
+
 -- | The manager program. Current directory needs to be the profile main directory.
 main :: IO ()
 main = do
   home <- getHomeDirectory
   (`catch` handleError) $ do
-    args <- getArgs
+    cmdLine <- unwords <$> getArgs
     saved <- get varMS
-    let logger str = printf (printf "[%s] %s\n" (unwords args) str)
+    let logger str = printf (printf "[%s] %s\n" cmdLine str)
         ManageSaved {managePath = envPath, profiles, startupDir} = saved
         mEnv = ManageEnv {envPath, logger}
         getProfile profID =
           maybe (throwIO $ ProfileNotFound $ Right profID) pure $ profiles M.!? profID
 
-    -- MAYBE Use optparse-applicative
-    case args of
-      -- Initiation run
-      [] -> logger "Successfully Installed"
+    Opts.customExecParser optPrefs manageOpts >>= \case
       -- Main installation
-      ["install"] -> do
+      Setup -> do
         logger "Begin"
         join $ installInit mEnv <$> getStartup startupDir
         logger "End"
 
+      -- Lists installed profiles
+      ListProf -> do
+        logger "Available profiles:"
+        for_ (M.elems profiles) $ \cfgPath -> do
+          Profile {profID, profName} <- getProfileFromPath envPath cfgPath
+          printf "- %s (%s)\n" (idStr profID) (T.unpack profName)
+
       -- Profile-specific installation
-      ["install", rawPath] -> do
+      InstallProf rawPath -> do
         logger "Begin"
         cfgPath <- canonicalizePath rawPath
         profile@Profile {profID} <- getProfileFromPath envPath cfgPath
@@ -139,8 +185,7 @@ main = do
         logger "End"
 
       -- Manually build profile
-      ["build", ident] -> do
-        profID <- makeIDM ident
+      BuildProf profID -> do
         cfgPath <- getProfile profID
         logger "Begin"
         runXM <- runXMonad mEnv <$> getProfileFromPath envPath cfgPath
@@ -148,8 +193,7 @@ main = do
         logger "End"
 
       -- Automatic profile run
-      ["run", ident] -> do
-        profID <- makeIDM ident
+      RunProf profID -> do
         cfgPath <- getProfile profID
         logger "Setup"
         withCurrentDirectory home $ do
@@ -162,19 +206,13 @@ main = do
         logger "Exit"
 
       -- Change startup
-      ["startup", rawPath] -> do
+      ChangeStart rawPath -> do
         logger "Begin"
         startupDir <- canonicalizePath rawPath
         getStartup startupDir -- Checks if startup directory is valid
         varMS $~ \saved -> saved {startupDir}
         logger "Startup manage directory set to %s" startupDir
         logger "End"
-
-      -- Illegal Arguments
-      args -> do
-        hPrintf stderr "Unexpected command %s\n" (show args)
-        hPrintf stderr "Supported commands:\n"
-        hPrintf stderr "install, install <profile>, build <profile> [dir], run <profile>\n"
   where
     -- MAYBE Do these need to be here?
     handleError = \case
