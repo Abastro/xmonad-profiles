@@ -1,4 +1,5 @@
 {-# LANGUAGE DerivingStrategies #-}
+
 -- | Checked stuffs.
 module Checked
   ( Executable,
@@ -6,30 +7,32 @@ module Checked
     exeToProc,
     setToExecutable,
     getExecutable,
+    mayExecutable,
     dataVar,
     ID,
     idStr,
     makeID,
-    makeIDM
+    makeIDM,
   )
 where
 
+import Control.Applicative
+import Control.Exception
 import Control.Monad
 import Data.Char
 import Data.Coerce
+import Data.StateVar
 import System.Directory
+import System.FilePath
+import System.IO
 import System.IO.Error
 import System.Process
 import Text.Printf
-import Data.StateVar
-import Control.Applicative
 import Text.Read
-import System.FilePath
-import System.IO
-import Control.Exception
 
 -- | Denotes executable on PATH.
 newtype Executable = Executable FilePath
+  deriving (Show)
 
 callExe :: Executable -> [String] -> IO ()
 callExe = coerce callProcess
@@ -45,13 +48,20 @@ setToExecutable path = do
 
 getExecutable :: String -> IO Executable
 getExecutable exe =
-  (findExecutable exe) >>= \case
+  findExecutable exe >>= \case
     Nothing -> ioError errNotFound
     Just path -> pure (Executable path)
   where
     errNotFound = mkIOError doesNotExistErrorType "Executable does not exist in PATH" Nothing (Just exe)
 
+mayExecutable :: FilePath -> IO (Maybe Executable)
+mayExecutable path = do
+  canPath <- canonicalizePath path
+  coerce $ findFileWith (fmap executable . getPermissions) ["/"] canPath
+
+
 -- Not really checked, but anyway
+
 -- | Data variable stored in XDG_DATA_DIR
 dataVar :: (Read a, Show a) => String -> String -> IO a -> StateVar a
 dataVar appName loc mkDef = makeStateVar load save
@@ -75,6 +85,7 @@ dataVar appName loc mkDef = makeStateVar load save
     perm = setOwnerSearchable True . setOwnerReadable True . setOwnerWritable True $ emptyPermissions
 
 -- TODO Remove Read instance
+
 -- | Denotes ID, made of ASCII letters w/o space
 newtype ID = ID String deriving newtype (Read, Show, Eq, Ord)
 
@@ -88,4 +99,3 @@ makeIDM :: MonadFail f => String -> f ID
 makeIDM ident = maybe (fail failMsg) pure $ makeID ident
   where
     failMsg = printf "ID contains illegal letter or spaces %s" ident
-

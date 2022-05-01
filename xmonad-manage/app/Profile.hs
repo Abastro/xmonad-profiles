@@ -8,12 +8,17 @@ import Data.Text qualified as T
 import Data.Text.IO qualified as T
 import System.Directory
 import System.FilePath
+import Text.Printf
+import System.Info (arch, os)
+
+-- TODO Profile images
 
 -- | Profile Config
 data ProfileCfg = ProfileCfg
   { profileID :: !ID,
     profileName :: !T.Text,
-    installScript :: !(Maybe FilePath)
+    installScript :: !(Maybe FilePath),
+    buildOnStart :: Bool
   }
   deriving (Read, Show)
 
@@ -21,9 +26,9 @@ data ProfileCfg = ProfileCfg
 data Profile = Profile
   { profID :: !ID,
     profName :: !T.Text,
-    profInstall :: !(Maybe FilePath),
-    cfgDir, dataDir, cacheDir, logDir :: !FilePath,
-    starter :: !FilePath
+    profInstall :: !(Maybe Executable),
+    xmonadExe :: !Executable,
+    cfgDir, dataDir, cacheDir, logDir :: !FilePath
   }
 
 data ProfileError
@@ -35,15 +40,14 @@ data ProfileError
 instance Exception ProfileError
 
 parseCfg :: FilePath -> T.Text -> Either ParseError ProfileCfg
-parseCfg = parse cfgP
-  where
-    cfgP :: Parsec T.Text () ProfileCfg
-    cfgP =
-      completeP . recordP "ProfileCfg" $
-        ProfileCfg
-          <$> fieldP "profileID" identP
-          <*> (commaP *> fieldP "profileName" textP)
-          <*> (commaP *> fieldP "installScript" (maybeP pathP))
+parseCfg =
+  parse $
+    completeP . recordP "ProfileCfg" $
+      ProfileCfg
+        <$> fieldP "profileID" identP
+        <*> (commaP *> fieldP "profileName" textP)
+        <*> (commaP *> fieldP "installScript" (maybeP pathP))
+        <*> (commaP *> fieldP "buildOnStart" boolP)
 
 -- | Gets a profile from specified path.
 getProfileFromPath :: FilePath -> FilePath -> IO Profile
@@ -55,10 +59,14 @@ getProfileFromPath project cfgDir = do
     Right cfg -> pure cfg
 
   let (profID, profName) = (profileID, profileName)
-      profInstall = (</>) cfgDir <$> installScript
+      installPath = (</>) cfgDir <$> installScript
       [dataDir, cacheDir, logDir] = locFor profileID <$> ["data", "cache", "logs"]
-  pure (Profile {profID, profName, profInstall, cfgDir, dataDir, cacheDir, logDir, starter})
+      customPath = cacheDir </> printf "xmonad-%s-%s" arch os
+  
+  profInstall <- traverse setToExecutable installPath
+  customExe <- if buildOnStart then pure Nothing else mayExecutable customPath
+  xmonadExe <- maybe (getExecutable "xmonad") pure customExe
+  pure (Profile {..})
   where
     cfgLoc = cfgDir </> "profile.cfg"
     locFor ident str = project </> str </> idStr ident
-    starter = project </> "start.sh"

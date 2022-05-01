@@ -13,14 +13,13 @@ data Startup = Startup
   }
 
 parseStart :: FilePath -> FilePath -> T.Text -> Either ParseError Startup
-parseStart parent = parse startP
-  where
-    startP =
-      completeP . recordP "Startup" $
-        Startup
-          <$> fieldP "startInstall" ((</>) parent <$> pathP)
-          <*> (commaP *> fieldP "startRun" ((</>) parent <$> pathP))
-          <*> (commaP *> fieldP "startEnv" (mapP textP))
+parseStart parent =
+  parse $
+    completeP . recordP "Startup" $
+      Startup
+        <$> fieldP "startInstall" ((</>) parent <$> pathP)
+        <*> (commaP *> fieldP "startRun" ((</>) parent <$> pathP))
+        <*> (commaP *> fieldP "startEnv" (mapP textP))
 
 -- | Gets startup from path
 getStartup :: FilePath -> IO Startup

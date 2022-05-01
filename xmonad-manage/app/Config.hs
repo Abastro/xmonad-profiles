@@ -8,6 +8,7 @@ module Config
     textP,
     pathP,
     maybeP,
+    boolP,
     completeP,
     commaP,
     mapP,
@@ -52,6 +53,10 @@ identP = P.stringLiteral cfgLang >>= makeIDM
 
 maybeP :: Parsec T.Text () a -> Parsec T.Text () (Maybe a)
 maybeP p = Just <$> (expectP "Just" *> p) <|> Nothing <$ expectP "Nothing"
+
+-- MAYBE generic implement for ADT
+boolP :: Parsec T.Text () Bool
+boolP = False <$ expectP "False" <|> True <$ expectP "True"
 
 mapP :: Parsec T.Text () a -> Parsec T.Text () (M.Map String a)
 mapP p = M.fromList <$> P.squares cfgLang (P.commaSep cfgLang kvPair)

@@ -21,9 +21,8 @@ import Text.Printf
 -- Git clone is Less ergonomic for change.
 -- How to work with configs?
 
-type XMonad = Executable
-
 -- Startup is manually switched. For now.
+-- TODO Refactor ManageSaved out
 -- TODO Read/Show is not flexible enough; enable incremental read/show
 data ManageSaved = ManageSaved
   { managePath :: !FilePath,
@@ -32,15 +31,10 @@ data ManageSaved = ManageSaved
   }
   deriving (Read, Show)
 
-data ManageEnv x = ManageEnv
+data ManageEnv = ManageEnv
   { envPath :: !FilePath,
-    xMonad :: !x,
     logger :: forall r. PrintfType r => String -> r
   }
-  deriving (Functor)
-
-xmonadEnv :: ManageEnv () -> IO (ManageEnv XMonad)
-xmonadEnv env = (<$ env) <$> getExecutable "xmonad"
 
 varMS :: StateVar ManageSaved
 varMS = dataVar "xmonad-manage" "manage-data" $ do
@@ -49,7 +43,7 @@ varMS = dataVar "xmonad-manage" "manage-data" $ do
   pure $ ManageSaved {managePath, profiles = M.empty, startupDir = managePath </> "start-basic"}
 
 -- | Initial installation.
-installInit :: ManageEnv () -> Startup -> IO ()
+installInit :: ManageEnv -> Startup -> IO ()
 installInit ManageEnv {logger} Startup {..} = do
   findExecutable "xmonad" >>= \case
     Just _ -> logger "xmonad found in PATH"
@@ -59,17 +53,15 @@ installInit ManageEnv {logger} Startup {..} = do
   callExe reqs []
 
 -- | Installs a profile - first argument is sudo.
-installProfile :: Executable -> ManageEnv XMonad -> Profile -> IO ()
+installProfile :: Executable -> ManageEnv -> Profile -> IO ()
 installProfile sudo mEnv profile@Profile {..} = do
-  installs <- traverse setToExecutable profInstall
-
   writeFile startPath startScript
   _ <- setToExecutable startPath
 
   writeFile runnerPath runner
   callExe sudo ["ln", "-sf", runnerPath, runnerLinked]
 
-  traverse_ (`callExe` []) installs
+  traverse_ (`callExe` []) profInstall
   runXMonad mEnv profile True ["--recompile"]
   where
     runnerLinked = "/usr" </> "share" </> "xsessions" </> idStr profID <.> "desktop"
@@ -97,16 +89,17 @@ installProfile sudo mEnv profile@Profile {..} = do
         ]
 
 -- | Runs xmonad for profile with given options.
-runXMonad :: ManageEnv XMonad -> Profile -> Bool -> [String] -> IO ()
-runXMonad ManageEnv {xMonad} Profile {dataDir, cfgDir, cacheDir, logDir} untilEnd opts = do
+runXMonad :: ManageEnv -> Profile -> Bool -> [String] -> IO ()
+runXMonad ManageEnv {logger} Profile {xmonadExe, dataDir, cfgDir, cacheDir, logDir} untilEnd opts = do
   setEnv "XMONAD_DATA_DIR" dataDir
   setEnv "XMONAD_CONFIG_DIR" cfgDir
   setEnv "XMONAD_CACHE_DIR" cacheDir
+  logger "Running xmonad through %s" (show xmonadExe)
   if untilEnd
-    then callExe xMonad opts
+    then callExe xmonadExe opts
     else do
       [logs, errors] <- traverse openLog ["xmonad.log", "xmonad.err"]
-      withCreateProcess (exeToProc xMonad opts) {std_out = UseHandle logs, std_err = UseHandle errors} $
+      withCreateProcess (exeToProc xmonadExe opts) {std_out = UseHandle logs, std_err = UseHandle errors} $
         \_ _ _ ph -> () <$ waitForProcess ph
   where
     openLog name = openFile (logDir </> name) WriteMode
@@ -120,10 +113,11 @@ main = do
     saved <- get varMS
     let logger str = printf (printf "[%s] %s\n" (unwords args) str)
         ManageSaved {managePath = envPath, profiles, startupDir} = saved
-        mEnv = ManageEnv {envPath, xMonad = (), logger}
+        mEnv = ManageEnv {envPath, logger}
         getProfile profID =
           maybe (throwIO $ ProfileNotFound $ Right profID) pure $ profiles M.!? profID
 
+    -- MAYBE Use optparse-applicative
     case args of
       -- Initiation run
       [] -> logger "Successfully Installed"
@@ -138,7 +132,7 @@ main = do
         logger "Begin"
         cfgPath <- canonicalizePath rawPath
         profile@Profile {profID} <- getProfileFromPath envPath cfgPath
-        join $ installProfile <$> getExecutable "sudo" <*> xmonadEnv mEnv <*> pure profile
+        join $ installProfile <$> getExecutable "sudo" <*> pure mEnv <*> pure profile
         let addProfile = M.insert profID cfgPath
         -- update saved
         varMS $~ \saved@ManageSaved {profiles} -> saved {profiles = addProfile profiles}
@@ -149,7 +143,7 @@ main = do
         profID <- makeIDM ident
         cfgPath <- getProfile profID
         logger "Begin"
-        runXM <- runXMonad <$> xmonadEnv mEnv <*> getProfileFromPath envPath cfgPath
+        runXM <- runXMonad mEnv <$> getProfileFromPath envPath cfgPath
         runXM True ["--recompile"]
         logger "End"
 
@@ -163,7 +157,7 @@ main = do
           callProcess startRun []
           traverse_ (uncurry setEnv) (M.toList $ T.unpack <$> startEnv)
         logger "Booting xmonad"
-        runXM <- runXMonad <$> xmonadEnv mEnv <*> getProfileFromPath envPath cfgPath
+        runXM <- runXMonad mEnv <$> getProfileFromPath envPath cfgPath
         withCurrentDirectory home $ runXM False []
         logger "Exit"
 
