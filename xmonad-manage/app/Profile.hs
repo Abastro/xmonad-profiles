@@ -23,6 +23,8 @@ data ProfileProps = ProfileProps
     profileIcon :: !(Maybe FilePath)
   }
 
+-- FIXME Icon field does not work well
+
 -- | Profile Config
 data ProfileCfg = ProfileCfg
   { profileID :: !ID,
@@ -107,8 +109,7 @@ installProfile mEnv profile@Profile {..} sudo = do
           printf "Name=%s" profileName,
           printf "Comment=%s" profileDetails,
           printf "Exec=%s" startPath,
-          printf "Type=XSession",
-          maybe "" (printf "Icon=%s" . (cfgDir </>)) profileIcon
+          printf "Type=XSession"
         ]
 
     startPath = dataDir </> "starter.sh"

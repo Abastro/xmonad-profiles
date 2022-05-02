@@ -1,6 +1,8 @@
 #!/bin/sh
 parent=$( dirname "$0" )
 
+echo "Startup for LightDM..."
+
 # Monitor settings use xrandr
 xrandr
 
