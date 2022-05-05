@@ -20,10 +20,6 @@ import Text.Printf
 -- Git clone is Less ergonomic for change.
 -- How to work with configs?
 
--- TODO Read/Show is not flexible enough; enable incremental read/show
-
--- TODO Versioned loading for decouping
-
 data Action
   = Update
   | Setup
@@ -70,82 +66,82 @@ manageOpts =
 
 -- | The manager program. Current directory needs to be the profile main directory.
 main :: IO ()
-main = do
-  home <- getHomeDirectory
-  (`catch` handleError) $ do
-    cmdLine <- unwords <$> getArgs
-    saved <- get varMS
-    let logger str = printf (printf "[%s] %s\n" cmdLine str)
-        ManageSaved {managePath = envPath, profiles, startupDir} = saved
-        mEnv = ManageEnv {envPath, logger}
-        getProfile profID =
-          maybe (throwIO $ ProfileNotFound $ Right profID) pure $ profiles M.!? profID
+main = (`catch` handleError) $ do
+  cmdLine <- unwords <$> getArgs
+  saved <- get varMS
+  let logger str = printf (printf "[%s] %s\n" cmdLine str)
+      ManageSaved {managePath = envPath, profiles, startupDir} = saved
+      mEnv = ManageEnv {envPath, logger}
+      getProfile profID =
+        maybe (throwIO $ ProfileNotFound $ Right profID) pure $ profiles M.!? profID
 
-    Opts.customExecParser optPrefs manageOpts >>= \case
-      -- Updates xmonad-manage
-      Update -> do
-        logger "Updating..."
-        withCurrentDirectory envPath $ do
-          cabal <- getExecutable "cabal"
-          callExe cabal ["install", "exe:xmonad-manage", "--overwrite-policy=always"]
-        logger "Updated"
+  Opts.customExecParser optPrefs manageOpts >>= \case
+    -- Updates xmonad-manage
+    Update -> do
+      logger "Updating..."
+      _ <- withCurrentDirectory envPath $ do
+        cabal <- getExecutable "cabal"
+        callExe cabal ["install", "exe:xmonad-manage", "--overwrite-policy=always"]
+        get varMS -- In case it is updated, need to reset!
+      logger "Updated"
 
-      -- Main installation
-      Setup -> do
-        logger "Begin"
-        findExecutable "xmonad" >>= \case
-          Just _ -> logger "xmonad found in PATH"
-          Nothing -> callCommand "cabal install xmonad"
-        logger "Install startup"
-        getStartup startupDir >>= installStartup
-        logger "End"
+    -- Main installation
+    Setup -> do
+      logger "Begin"
+      findExecutable "xmonad" >>= \case
+        Just _ -> logger "xmonad found in PATH"
+        Nothing -> callCommand "cabal install xmonad"
+      logger "Install startup"
+      getStartup startupDir >>= installStartup
+      logger "End"
 
-      -- Lists installed profiles
-      ListProf -> do
-        logger "Available profiles:"
-        for_ (M.elems profiles) $ \cfgPath -> do
-          Profile {profID, profProps = ProfileProps {..}} <- getProfileFromPath envPath cfgPath
-          printf "- %s (%s)\n" (idStr profID) profileName
-          printf "    %s\n" profileDetails
+    -- Lists installed profiles
+    ListProf -> do
+      logger "Available profiles:"
+      for_ (M.elems profiles) $ \cfgPath -> do
+        Profile {profID, profProps = ProfileProps {..}} <- getProfileFromPath envPath cfgPath
+        printf "- %s (%s)\n" (idStr profID) profileName
+        printf "    %s\n" profileDetails
 
-      -- Profile-specific installation
-      InstallProf rawPath -> do
-        cfgPath <- canonicalizePath rawPath
-        logger "Begin"
-        profile@Profile {profID} <- getProfileFromPath envPath cfgPath
-        getExecutable "sudo" >>= installProfile mEnv profile
-        let addProfile = M.insert profID cfgPath
-        -- update saved
-        varMS $~ \saved@ManageSaved {profiles} -> saved {profiles = addProfile profiles}
-        logger "End"
+    -- Profile-specific installation
+    InstallProf rawPath -> do
+      cfgPath <- canonicalizePath rawPath
+      logger "Begin"
+      profile@Profile {profID} <- getProfileFromPath envPath cfgPath
+      getExecutable "sudo" >>= installProfile mEnv profile
+      let addProfile = M.insert profID cfgPath
+      -- update saved
+      varMS $~ \saved@ManageSaved {profiles} -> saved {profiles = addProfile profiles}
+      logger "End"
 
-      -- Manually build profile
-      BuildProf profID -> do
-        cfgPath <- getProfile profID
-        logger "Begin"
-        runXM <- runProfile mEnv <$> getProfileFromPath envPath cfgPath
-        runXM True ["--recompile"]
-        logger "End"
+    -- Manually build profile
+    BuildProf profID -> do
+      cfgPath <- getProfile profID
+      logger "Begin"
+      runXM <- runProfile mEnv <$> getProfileFromPath envPath cfgPath
+      runXM True ["--recompile"]
+      logger "End"
 
-      -- Automatic profile run
-      RunProf profID -> do
-        cfgPath <- getProfile profID
-        logger "Setup"
-        runStart <- runStartup <$> getStartup startupDir
-        withCurrentDirectory home runStart
-        logger "Booting xmonad"
-        runXM <- runProfile mEnv <$> getProfileFromPath envPath cfgPath
-        withCurrentDirectory home $ runXM False []
-        logger "Exit"
+    -- Automatic profile run
+    RunProf profID -> do
+      home <- getHomeDirectory
+      cfgPath <- getProfile profID
+      logger "Setup"
+      runStart <- runStartup <$> getStartup startupDir
+      withCurrentDirectory home runStart
+      logger "Booting xmonad"
+      runXM <- runProfile mEnv <$> getProfileFromPath envPath cfgPath
+      withCurrentDirectory home $ runXM False []
+      logger "Exit"
 
-      -- Change startup
-      ChangeStart rawPath -> do
-        startupDir <- canonicalizePath rawPath
-        logger "Begin"
-        _ <- getStartup startupDir -- This checks if startup directory is valid
-        varMS $~ \saved -> saved {startupDir}
-        logger "Startup manage directory set to %s" startupDir
-        logger "End"
+    -- Change startup
+    ChangeStart rawPath -> do
+      startupDir <- canonicalizePath rawPath
+      logger "Begin"
+      _ <- getStartup startupDir -- This checks if startup directory is valid
+      varMS $~ \saved -> saved {startupDir}
+      logger "Startup manage directory set to %s" startupDir
+      logger "End"
   where
     -- MAYBE Do these need to be here?
     handleError = \case

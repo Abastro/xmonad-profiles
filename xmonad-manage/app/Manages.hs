@@ -11,13 +11,17 @@ import Data.StateVar
 import System.Directory
 import System.FilePath
 import Text.Printf
+import GHC.Generics (Generic)
+import Data.Serialize (Serialize)
 
 data ManageSaved = ManageSaved
   { managePath :: !FilePath,
     profiles :: !(M.Map ID FilePath),
     startupDir :: !FilePath
   }
-  deriving (Read, Show)
+  deriving (Show, Generic)
+
+instance Serialize ManageSaved
 
 data ManageEnv = ManageEnv
   { envPath :: !FilePath,
