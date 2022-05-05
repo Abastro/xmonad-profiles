@@ -1,6 +1,3 @@
-[submodule "pulpmonad"]
-	path = pulpmonad
-	url = git@github.com:Abastro/pulpmonad.git
 [submodule "xmonad-test"]
 	path = xmonad-test
 	url = git@github.com:Abastro/xmonad-test.git
