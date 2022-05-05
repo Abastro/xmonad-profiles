@@ -85,7 +85,9 @@ main = do
       -- Updates xmonad-manage
       Update -> do
         logger "Updating..."
-        getExecutable "cabal" >>= (`callExe` ["install", "exe:xmonad-manage", "--overwrite-policy=always"])
+        withCurrentDirectory envPath $ do
+          cabal <- getExecutable "cabal"
+          callExe cabal ["install", "exe:xmonad-manage", "--overwrite-policy=always"]
         logger "Updated"
 
       -- Main installation
