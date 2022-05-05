@@ -23,8 +23,6 @@ data ProfileProps = ProfileProps
     profileIcon :: !(Maybe FilePath)
   }
 
--- FIXME Icon field does not work well
-
 -- | Profile Config
 data ProfileCfg = ProfileCfg
   { profileID :: !ID,

@@ -22,6 +22,8 @@ import Text.Printf
 
 -- TODO Read/Show is not flexible enough; enable incremental read/show
 
+-- TODO Versioned loading for decouping
+
 data Action
   = Update
   | Setup
