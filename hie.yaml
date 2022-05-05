@@ -1,11 +1,11 @@
 cradle:
   multi:
-    - path: "./install"
-      config:
-        cradle:
-          direct:
-            arguments: ["-haddock"]
     - path: "./xmonad-manage"
       config:
         cradle:
           cabal:
+    - path: "./xmonad-test"
+      config:
+        cradle:
+          cabal:
+

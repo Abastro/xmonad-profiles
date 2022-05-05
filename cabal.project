@@ -1,4 +1,6 @@
-packages: xmonad-manage/xmonad-manage.cabal
+packages:
+  xmonad-manage/xmonad-manage.cabal
+  xmonad-test/xmonad-test.cabal
 
 with-compiler: ghc-9.2.2
 
