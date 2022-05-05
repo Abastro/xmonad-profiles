@@ -62,7 +62,7 @@ getProfileFromPath project cfgDir = do
   doesDirectoryExist cfgDir >>= (`unless` throwIO (ProfileNotFound $ Left cfgDir))
   ProfileCfg {..} <- readYAMLFile (ProfileIOError cfgDir) ProfileWrongFormat (cfgDir </> "profile.yaml")
 
-  let installPath = (</>) cfgDir <$> installScript
+  let installPath = (cfgDir </>) <$> installScript
       [dataDir, cacheDir, logDir] = locFor profileID <$> ["data", "cache", "logs"]
       customPath = cacheDir </> printf "xmonad-%s-%s" arch os
 
