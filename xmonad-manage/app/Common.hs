@@ -13,15 +13,18 @@ module Common
     idStr,
     makeID,
     makeIDM,
+    readYAMLFile,
   )
 where
 
 import Control.Applicative
 import Control.Exception
 import Control.Monad
+import Data.ByteString.Lazy qualified as B
 import Data.Char
 import Data.Coerce
 import Data.StateVar
+import Data.YAML
 import System.Directory
 import System.FilePath
 import System.IO
@@ -29,6 +32,7 @@ import System.IO.Error
 import System.Process
 import Text.Printf
 import Text.Read
+import qualified Data.Text as T
 
 -- | Denotes executable on PATH.
 newtype Executable = Executable FilePath
@@ -59,9 +63,6 @@ mayExecutable path = do
   absPath <- canonicalizePath path
   found <- findFileWith (fmap executable . getPermissions) ["/"] absPath
   pure $ coerce path <$ found -- Want symlink-included path anyway
-
-
--- Not really checked, but anyway
 
 -- | Data variable stored in XDG_DATA_DIR
 dataVar :: (Read a, Show a) => String -> String -> IO a -> StateVar a
@@ -100,3 +101,13 @@ makeIDM :: MonadFail f => String -> f ID
 makeIDM ident = maybe (fail failMsg) pure $ makeID ident
   where
     failMsg = printf "ID contains illegal letter or spaces: %s" ident
+
+instance FromYAML ID where
+  parseYAML n = parseYAML n >>= makeIDM . T.unpack
+
+readYAMLFile :: (FromYAML a, Exception e) => (IOError -> e) -> (String -> e) -> FilePath -> IO a
+readYAMLFile ioErr formatErr path = do
+  file <- catch @IOError (B.readFile path) $ throwIO . ioErr
+  case decode1 file of
+    Left (pos, err) -> (throwIO . formatErr) (prettyPosWithSource pos file "Wrong format" <> err)
+    Right st -> pure st

@@ -1,11 +1,11 @@
 module Startup where
 
 import Common
-import Config
+import Data.Bifunctor (bimap)
 import Data.Foldable
 import Data.Map.Strict qualified as M
 import Data.Text qualified as T
-import Data.Text.IO qualified as T
+import Data.YAML
 import System.Environment
 import System.FilePath
 import System.Process
@@ -13,27 +13,20 @@ import System.Process
 data Startup = Startup
   { startInstall :: !FilePath,
     startRun :: !FilePath,
-    startEnv :: !(M.Map String T.Text)
+    startEnv :: !(M.Map T.Text T.Text)
   }
+  deriving (Show)
 
-parseStart :: FilePath -> FilePath -> T.Text -> Either ParseError Startup
-parseStart parent =
-  parse $
-    completeP . recordP "Startup" $
-      Startup
-        <$> fieldP "startInstall" ((</>) parent <$> pathP)
-        <*> (commaP *> fieldP "startRun" ((</>) parent <$> pathP))
-        <*> (commaP *> fieldP "startEnv" (mapP textP))
+instance FromYAML Startup where
+  parseYAML = withMap "startup" $ \m ->
+    Startup
+      <$> (T.unpack <$> m .: T.pack "install")
+      <*> (T.unpack <$> m .: T.pack "run")
+      <*> m .: T.pack "environment"
 
 -- | Gets startup from path
 getStartup :: FilePath -> IO Startup
-getStartup startupDir = do
-  startupTxt <- T.readFile startupLoc
-  case parseStart startupDir startupLoc startupTxt of
-    Left err -> fail (show err)
-    Right st -> pure st
-  where
-    startupLoc = startupDir </> "startup.cfg"
+getStartup startupDir = readYAMLFile id userError (startupDir </> "startup.yaml")
 
 installStartup :: Startup -> IO ()
 installStartup Startup {..} = do
@@ -43,4 +36,4 @@ installStartup Startup {..} = do
 runStartup :: Startup -> IO ()
 runStartup Startup {..} = do
   callProcess startRun []
-  traverse_ (uncurry setEnv) (M.toList $ T.unpack <$> startEnv)
+  traverse_ (uncurry setEnv) (bimap T.unpack T.unpack <$> M.toList startEnv)

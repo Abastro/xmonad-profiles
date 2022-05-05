@@ -80,3 +80,4 @@ cfgLang = P.makeTokenParser cfgLangDef
           reservedOpNames = ["="],
           caseSensitive = True
         }
+

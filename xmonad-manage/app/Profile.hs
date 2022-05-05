@@ -1,12 +1,11 @@
 module Profile where
 
 import Common
-import Config
 import Control.Exception
 import Control.Monad
 import Data.Foldable
 import Data.Text qualified as T
-import Data.Text.IO qualified as T
+import Data.YAML
 import Manages
 import System.Directory
 import System.Environment
@@ -19,9 +18,9 @@ import Text.Printf
 -- | Profile Properties
 data ProfileProps = ProfileProps
   { profileName :: !T.Text,
-    profileDetails :: !T.Text,
-    profileIcon :: !(Maybe FilePath)
+    profileDetails :: !T.Text
   }
+  deriving (Show)
 
 -- | Profile Config
 data ProfileCfg = ProfileCfg
@@ -30,6 +29,15 @@ data ProfileCfg = ProfileCfg
     installScript :: !(Maybe FilePath),
     buildOnStart :: Bool
   }
+  deriving (Show)
+
+instance FromYAML ProfileCfg where
+  parseYAML = withMap "profile" $ \m ->
+    ProfileCfg
+      <$> m .: T.pack "ID"
+      <*> (ProfileProps <$> m .: T.pack "name" <*> m .: T.pack "details")
+      <*> (fmap T.unpack <$> m .:? T.pack "install")
+      <*> m .: T.pack "buildOnStart"
 
 -- | Profile. Requires the config path to exist.
 data Profile = Profile
@@ -48,31 +56,11 @@ data ProfileError
 
 instance Exception ProfileError
 
-parseCfg :: FilePath -> T.Text -> Either ParseError ProfileCfg
-parseCfg = parse (completeP cfgP)
-  where
-    cfgP =
-      recordP "ProfileCfg" $
-        ProfileCfg
-          <$> fieldP "ID" identP
-          <*> (commaP *> fieldP "properties" propsP)
-          <*> (commaP *> fieldP "installScript" (maybeP pathP))
-          <*> (commaP *> fieldP "buildOnStart" boolP)
-    propsP =
-      recordP "ProfileProps" $
-        ProfileProps
-          <$> fieldP "name" textP
-          <*> (commaP *> fieldP "details" textP)
-          <*> (commaP *> fieldP "icon" (maybeP pathP))
-
 -- | Gets a profile from specified path.
 getProfileFromPath :: FilePath -> FilePath -> IO Profile
 getProfileFromPath project cfgDir = do
   doesDirectoryExist cfgDir >>= (`unless` throwIO (ProfileNotFound $ Left cfgDir))
-  cfgTxt <- catch @IOError (T.readFile cfgLoc) $ throwIO . ProfileIOError cfgDir
-  ProfileCfg {..} <- case parseCfg cfgLoc cfgTxt of
-    Left err -> throwIO (ProfileWrongFormat $ show err)
-    Right cfg -> pure cfg
+  ProfileCfg {..} <- readYAMLFile (ProfileIOError cfgDir) ProfileWrongFormat (cfgDir </> "profile.yaml")
 
   let installPath = (</>) cfgDir <$> installScript
       [dataDir, cacheDir, logDir] = locFor profileID <$> ["data", "cache", "logs"]
@@ -83,7 +71,6 @@ getProfileFromPath project cfgDir = do
   xmonadExe <- maybe (getExecutable "xmonad") pure customExe
   pure (Profile {profID = profileID, profProps = profileProps, ..})
   where
-    cfgLoc = cfgDir </> "profile.cfg"
     locFor ident str = project </> str </> idStr ident
 
 -- | Installs a profile - first argument is sudo.
