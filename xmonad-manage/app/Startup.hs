@@ -27,7 +27,7 @@ instance FromYAML Startup where
 -- | Gets startup from path
 getStartup :: FilePath -> IO Startup
 getStartup startupDir = do
-  Startup {..} <- readYAMLFile id userError (startupDir </> "startup.yaml")
+  Startup {..} <- readYAMLFile userError (startupDir </> "startup.yaml")
   pure Startup {startInstall = startupDir </> startInstall, startRun = startupDir </> startRun, startEnv}
 
 installStartup :: Startup -> IO ()

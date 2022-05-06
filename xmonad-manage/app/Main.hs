@@ -73,7 +73,7 @@ main = (`catch` handleError) $ do
       ManageSaved {managePath = envPath, profiles, startupDir} = saved
       mEnv = ManageEnv {envPath, logger}
       getProfile profID =
-        maybe (throwIO $ ProfileNotFound $ Right profID) pure $ profiles M.!? profID
+        maybe (throwIO $ ProfileNotFound profID) pure $ profiles M.!? profID
 
   Opts.customExecParser optPrefs manageOpts >>= \case
     -- Updates xmonad-manage
@@ -98,41 +98,41 @@ main = (`catch` handleError) $ do
     -- Lists installed profiles
     ListProf -> do
       logger "Available profiles:"
-      for_ (M.elems profiles) $ \cfgPath -> do
-        Profile {profID, profProps = ProfileProps {..}} <- getProfileFromPath envPath cfgPath
-        printf "- %s (%s)\n" (idStr profID) profileName
-        printf "    %s\n" profileDetails
+      for_ (M.elems profiles) $
+        withProfile mEnv $ \Profile {profID, profProps, cfgDir} -> do
+          let ProfileProps {..} = profProps
+          printf "- %s (%s)\n" (idStr profID) profileName
+          printf "    Config at: %s\n" cfgDir
+          printf "    %s\n" profileDetails
 
     -- Profile-specific installation
     InstallProf rawPath -> do
       cfgPath <- canonicalizePath rawPath
       logger "Begin"
-      profile@Profile {profID} <- getProfileFromPath envPath cfgPath
-      getExecutable "sudo" >>= installProfile mEnv profile
-      let addProfile = M.insert profID cfgPath
-      -- update saved
-      varMS $~ \saved@ManageSaved {profiles} -> saved {profiles = addProfile profiles}
+      let onProfile prof@Profile {profID} = do
+            getExecutable "sudo" >>= installProfile mEnv prof
+            let addProfile = M.insert profID cfgPath
+            varMS $~ \saved@ManageSaved {profiles} -> saved {profiles = addProfile profiles}
+      withProfile mEnv onProfile cfgPath
       logger "End"
 
     -- Manually build profile
     BuildProf profID -> do
       cfgPath <- getProfile profID
       logger "Begin"
-      runXM <- runProfile mEnv <$> getProfileFromPath envPath cfgPath
-      runXM True ["--recompile"]
+      withProfile mEnv (buildProfile mEnv) cfgPath
       logger "End"
 
     -- Automatic profile run
     RunProf profID -> do
       home <- getHomeDirectory
       cfgPath <- getProfile profID
-      logger "Setup"
-      runStart <- runStartup <$> getStartup startupDir
-      withCurrentDirectory home runStart
-      logger "Booting xmonad"
-      runXM <- runProfile mEnv <$> getProfileFromPath envPath cfgPath
-      withCurrentDirectory home $ runXM False []
-      logger "Exit"
+      withCurrentDirectory home $ do
+        logger "Setup"
+        getStartup startupDir >>= runStartup
+        logger "Booting xmonad"
+        withProfile mEnv (runProfile mEnv) cfgPath
+        logger "Exit"
 
     -- Change startup
     ChangeStart rawPath -> do
@@ -145,10 +145,8 @@ main = (`catch` handleError) $ do
   where
     -- MAYBE Do these need to be here?
     handleError = \case
-      ProfileNotFound loc -> do
-        case loc of
-          Left profPath -> hPrintf stderr "Error: Profile not found in path %s\n" profPath
-          Right profID -> hPrintf stderr "Error: Profile %s not found\n" (idStr profID)
+      ProfileNotFound profID -> do
+        hPrintf stderr "Error: Profile %s not found\n" (idStr profID)
         exitWith (ExitFailure 1)
       ProfileIOError profPath err -> do
         hPrintf stderr "Error: IO Exception while reading profile.cfg in path %s\n" profPath

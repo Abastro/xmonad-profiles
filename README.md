@@ -31,7 +31,7 @@ which you can select from login screen.
 
 - `xmonad-manage setup`: Installs common components.
 - `xmonad-manage install <profile-path>`: Installs profile from `<profile-path>`.
-- `xmonad-manage build <profile-id>`: Manually builds config for profile `<profile-id>`
+- `xmonad-manage build <profile-id>`: Builds config for profile `<profile-id>`
 - `xmonad-manage run <profile-id>`: Runs XMonad instance of profile `<profile-id>`
 
 Run `xmonad-manage` to check further details.

@@ -2,18 +2,15 @@ module Profile where
 
 import Common
 import Control.Exception
-import Control.Monad
 import Data.Foldable
 import Data.Text qualified as T
 import Data.YAML
 import Manages
-import System.Directory
 import System.Environment
 import System.FilePath
-import System.IO
 import System.Info (arch, os)
-import System.Process
 import Text.Printf
+import System.Directory (withCurrentDirectory)
 
 -- | Profile Properties
 data ProfileProps = ProfileProps
@@ -27,7 +24,7 @@ data ProfileCfg = ProfileCfg
   { profileID :: !ID,
     profileProps :: !ProfileProps,
     installScript :: !(Maybe FilePath),
-    buildOnStart :: Bool
+    buildScript, runScript :: !FilePath
   }
   deriving (Show)
 
@@ -37,53 +34,55 @@ instance FromYAML ProfileCfg where
       <$> m .: T.pack "ID"
       <*> (ProfileProps <$> m .: T.pack "name" <*> m .: T.pack "details")
       <*> (fmap T.unpack <$> m .:? T.pack "install")
-      <*> m .: T.pack "buildOnStart"
+      <*> (T.unpack <$> m .: T.pack "build")
+      <*> (T.unpack <$> m .: T.pack "run")
 
 -- | Profile. Requires the config path to exist.
 data Profile = Profile
   { profID :: !ID,
     profProps :: !ProfileProps,
     profInstall :: !(Maybe Executable),
-    xmonadExe :: !Executable,
+    profBuild, profRun :: !Executable,
     cfgDir, dataDir, cacheDir, logDir :: !FilePath
   }
 
 data ProfileError
-  = ProfileNotFound (Either FilePath ID)
+  = ProfileNotFound ID
   | ProfileIOError FilePath IOError
   | ProfileWrongFormat String
   deriving (Show)
 
 instance Exception ProfileError
 
--- | Gets a profile from specified path.
-getProfileFromPath :: FilePath -> FilePath -> IO Profile
-getProfileFromPath project cfgDir = do
-  doesDirectoryExist cfgDir >>= (`unless` throwIO (ProfileNotFound $ Left cfgDir))
-  ProfileCfg {..} <- readYAMLFile (ProfileIOError cfgDir) ProfileWrongFormat (cfgDir </> "profile.yaml")
-
-  let installPath = (cfgDir </>) <$> installScript
-      [dataDir, cacheDir, logDir] = locFor profileID <$> ["data", "cache", "logs"]
-      customPath = cacheDir </> printf "xmonad-%s-%s" arch os
-
-  profInstall <- traverse setToExecutable installPath
-  customExe <- if buildOnStart then pure Nothing else mayExecutable customPath
-  xmonadExe <- maybe (getExecutable "xmonad") pure customExe
-  pure (Profile {profID = profileID, profProps = profileProps, ..})
+withProfile :: ManageEnv -> (Profile -> IO a) -> FilePath -> IO a
+withProfile (ManageEnv {..}) withProf cfgDir = handle @IOError onIOErr $ do
+  ProfileCfg {..} <- readYAMLFile ProfileWrongFormat (cfgDir </> "profile.yaml")
+  let [dataDir, cacheDir, logDir] = locFor profileID <$> ["data", "cache", "logs"]
+  profInstall <- traverse setToExecutable $ (cfgDir </>) <$> installScript
+  [profBuild, profRun] <- traverse setToExecutable $ (cfgDir </>) <$> [buildScript, runScript]
+  do
+    setEnv "ENV_ARCH" arch >> setEnv "ENV_OS" os
+    setEnv "XMONAD_DATA_DIR" dataDir
+    setEnv "XMONAD_CONFIG_DIR" cfgDir
+    setEnv "XMONAD_CACHE_DIR" cacheDir
+    setEnv "XMONAD_LOG_DIR" logDir
+  withProf $ Profile {profID = profileID, profProps = profileProps, ..}
   where
-    locFor ident str = project </> str </> idStr ident
+    onIOErr = throwIO . ProfileIOError cfgDir
+    locFor ident str = envPath </> str </> idStr ident
 
--- | Installs a profile - first argument is sudo.
+-- | Installs a profile.
 installProfile :: ManageEnv -> Profile -> Executable -> IO ()
-installProfile mEnv profile@Profile {..} sudo = do
+installProfile mEnv@ManageEnv {logger} profile@Profile {..} sudo = do
+  -- Running setup
   writeFile startPath startScript
   _ <- setToExecutable startPath
-
   writeFile runnerPath (runner profProps)
   callExe sudo ["ln", "-sf", runnerPath, runnerLinked]
 
+  logger "Install using %s" (show profInstall)
   traverse_ (`callExe` []) profInstall
-  runProfile mEnv profile True ["--recompile"]
+  buildProfile mEnv profile
   where
     runnerLinked = "/usr" </> "share" </> "xsessions" </> idStr profID <.> "desktop"
     runnerPath = dataDir </> "run" <.> "desktop"
@@ -109,18 +108,12 @@ installProfile mEnv profile@Profile {..} sudo = do
             (show $ logDir </> "start.err")
         ]
 
--- | Run profile xmoand instance with given options.
-runProfile :: ManageEnv -> Profile -> Bool -> [String] -> IO ()
-runProfile ManageEnv {logger} Profile {xmonadExe, dataDir, cfgDir, cacheDir, logDir} untilEnd opts = do
-  setEnv "XMONAD_DATA_DIR" dataDir
-  setEnv "XMONAD_CONFIG_DIR" cfgDir
-  setEnv "XMONAD_CACHE_DIR" cacheDir
-  logger "Running xmonad through %s" (show xmonadExe)
-  if untilEnd
-    then callExe xmonadExe opts
-    else do
-      [logs, errors] <- traverse openLog ["xmonad.log", "xmonad.err"]
-      withCreateProcess (exeToProc xmonadExe opts) {std_out = UseHandle logs, std_err = UseHandle errors} $
-        \_ _ _ ph -> () <$ waitForProcess ph
-  where
-    openLog name = openFile (logDir </> name) WriteMode
+buildProfile :: ManageEnv -> Profile -> IO ()
+buildProfile (ManageEnv {logger}) (Profile {cfgDir, profBuild}) = do
+  logger "Build using %s" (show profBuild)
+  withCurrentDirectory cfgDir $ callExe profBuild []
+
+runProfile :: ManageEnv -> Profile -> IO ()
+runProfile (ManageEnv {logger}) (Profile {profRun}) = do
+  logger "Run using %s" (show profRun)
+  callExe profRun []

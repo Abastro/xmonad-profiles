@@ -103,9 +103,9 @@ makeIDM ident = maybe (fail failMsg) pure $ makeID ident
 instance FromYAML ID where
   parseYAML n = parseYAML n >>= makeIDM . T.unpack
 
-readYAMLFile :: (FromYAML a, Exception e) => (IOError -> e) -> (String -> e) -> FilePath -> IO a
-readYAMLFile ioErr formatErr path = do
-  file <- catch @IOError (B.readFile path) $ throwIO . ioErr
+readYAMLFile :: (FromYAML a, Exception e) => (String -> e) -> FilePath -> IO a
+readYAMLFile formatErr path = do
+  file <- B.readFile path
   case decode1 file of
     Left (pos, err) -> (throwIO . formatErr) (prettyPosWithSource pos file "Wrong format" <> err)
     Right st -> pure st
