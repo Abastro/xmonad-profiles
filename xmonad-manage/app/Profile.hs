@@ -63,8 +63,8 @@ data ProfileError
 
 instance Exception ProfileError
 
-withProfile :: ManageEnv -> (Profile -> IO a) -> FilePath -> IO a
-withProfile ManageEnv{..} withProf cfgDir = handle @IOError onIOErr $ do
+withProfile :: ManageEnv -> FilePath -> (Profile -> IO a) -> IO a
+withProfile ManageEnv{..} cfgDir withProf = handle @IOError onIOErr $ do
   ProfileCfg{..} <- readYAMLFile ProfileWrongFormat (cfgDir </> "profile.yaml")
   let [dataDir, cacheDir, logDir] = locFor profileID <$> ["data", "cache", "logs"]
   profInstall <- traverse setToExecutable $ (cfgDir </>) <$> installScript
@@ -85,6 +85,9 @@ runnerLinkPath profID = "/" </> "usr" </> "share" </> "xsessions" </> idStr prof
 
 installProfile :: ManageEnv -> Profile -> Executable -> IO ()
 installProfile mEnv@ManageEnv{logger} profile@Profile{..} sudo = do
+  -- Prepares directories
+  traverse_ (createDirectoryIfMissing True) [dataDir, cacheDir, logDir]
+
   -- Running setup
   writeFile startPath startScript
   _ <- setToExecutable startPath

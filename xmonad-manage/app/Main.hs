@@ -16,9 +16,8 @@ import System.IO
 import System.Process
 import Text.Printf
 
--- TODO Decide:
--- Git clone is Less ergonomic for change.
--- How to work with configs?
+-- NOTE Fetches from separate configuration directory for each profile.
+-- TODO Maybe do not install package, and instead check for existence of packages?
 
 data Action
   = Update
@@ -102,8 +101,8 @@ main = (`catch` handleError) $ do
     -- Lists installed profiles
     ListProf -> do
       logger "Available profiles:"
-      for_ (M.elems profiles) $
-        withProfile mEnv $ \Profile{profID, profProps, cfgDir} -> do
+      for_ (M.elems profiles) $ \cfgPath ->
+        withProfile mEnv cfgPath $ \Profile{profID, profProps, cfgDir} -> do
           let ProfileProps{..} = profProps
           printf "- %s (%s)\n" (idStr profID) profileName
           printf "    Config at: %s\n" cfgDir
@@ -117,25 +116,24 @@ main = (`catch` handleError) $ do
             getExecutable "sudo" >>= installProfile mEnv prof
             let addProfile = M.insert profID cfgPath
             varMS $~ \saved@ManageSaved{profiles} -> saved{profiles = addProfile profiles}
-      withProfile mEnv onProfile cfgPath
+      withProfile mEnv cfgPath onProfile
       logger "End"
 
     -- Remove a profile
     RemoveProf profID -> do
       cfgPath <- getProfile profID
       logger "Begin"
-      let onProfile prof@Profile{profID} = do
-            getExecutable "sudo" >>= removeProfile mEnv prof
-            let rmProfile = M.delete profID
-            varMS $~ \saved@ManageSaved{profiles} -> saved{profiles = rmProfile profiles}
-      withProfile mEnv onProfile cfgPath
+      withProfile mEnv cfgPath $ \prof@Profile{profID} -> do
+        getExecutable "sudo" >>= removeProfile mEnv prof
+        let rmProfile = M.delete profID
+        varMS $~ \saved@ManageSaved{profiles} -> saved{profiles = rmProfile profiles}
       logger "End"
 
     -- Manually build profile
     BuildProf profID -> do
       cfgPath <- getProfile profID
       logger "Begin"
-      withProfile mEnv (buildProfile mEnv) cfgPath
+      withProfile mEnv cfgPath (buildProfile mEnv)
       logger "End"
 
     -- Automatic profile run
@@ -146,7 +144,7 @@ main = (`catch` handleError) $ do
         logger "Setup"
         getStartup startupDir >>= runStartup
         logger "Booting xmonad"
-        withProfile mEnv (runProfile mEnv) cfgPath
+        withProfile mEnv cfgPath (runProfile mEnv)
         logger "Exit"
 
     -- Change startup
@@ -164,7 +162,7 @@ main = (`catch` handleError) $ do
         hPrintf stderr "Error: Profile %s not found\n" (idStr profID)
         exitWith (ExitFailure 1)
       ProfileIOError profPath err -> do
-        hPrintf stderr "Error: IO Exception while reading profile.cfg in path %s\n" profPath
+        hPrintf stderr "Error: IO Exception while performing profile action on path %s\n" profPath
         hPrintf stderr "Details: %s\n" (show err)
         exitWith (ExitFailure 2)
       ProfileWrongFormat details -> do
