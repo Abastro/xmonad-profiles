@@ -1,4 +1,13 @@
-module Profile where
+module Profile (
+  ProfileProps (..),
+  Profile (..),
+  ProfileError (..),
+  withProfile,
+  installProfile,
+  removeProfile,
+  buildProfile,
+  runProfile,
+) where
 
 import Common
 import Control.Exception
@@ -6,25 +15,25 @@ import Data.Foldable
 import Data.Text qualified as T
 import Data.YAML
 import Manages
+import System.Directory
 import System.Environment
 import System.FilePath
 import System.Info (arch, os)
 import Text.Printf
-import System.Directory (withCurrentDirectory)
 
 -- | Profile Properties
 data ProfileProps = ProfileProps
-  { profileName :: !T.Text,
-    profileDetails :: !T.Text
+  { profileName :: !T.Text
+  , profileDetails :: !T.Text
   }
   deriving (Show)
 
 -- | Profile Config
 data ProfileCfg = ProfileCfg
-  { profileID :: !ID,
-    profileProps :: !ProfileProps,
-    installScript :: !(Maybe FilePath),
-    buildScript, runScript :: !FilePath
+  { profileID :: !ID
+  , profileProps :: !ProfileProps
+  , installScript :: !(Maybe FilePath)
+  , buildScript, runScript :: !FilePath
   }
   deriving (Show)
 
@@ -39,11 +48,11 @@ instance FromYAML ProfileCfg where
 
 -- | Profile. Requires the config path to exist.
 data Profile = Profile
-  { profID :: !ID,
-    profProps :: !ProfileProps,
-    profInstall :: !(Maybe Executable),
-    profBuild, profRun :: !Executable,
-    cfgDir, dataDir, cacheDir, logDir :: !FilePath
+  { profID :: !ID
+  , profProps :: !ProfileProps
+  , profInstall :: !(Maybe Executable)
+  , profBuild, profRun :: !Executable
+  , cfgDir, dataDir, cacheDir, logDir :: !FilePath
   }
 
 data ProfileError
@@ -55,8 +64,8 @@ data ProfileError
 instance Exception ProfileError
 
 withProfile :: ManageEnv -> (Profile -> IO a) -> FilePath -> IO a
-withProfile (ManageEnv {..}) withProf cfgDir = handle @IOError onIOErr $ do
-  ProfileCfg {..} <- readYAMLFile ProfileWrongFormat (cfgDir </> "profile.yaml")
+withProfile ManageEnv{..} withProf cfgDir = handle @IOError onIOErr $ do
+  ProfileCfg{..} <- readYAMLFile ProfileWrongFormat (cfgDir </> "profile.yaml")
   let [dataDir, cacheDir, logDir] = locFor profileID <$> ["data", "cache", "logs"]
   profInstall <- traverse setToExecutable $ (cfgDir </>) <$> installScript
   [profBuild, profRun] <- traverse setToExecutable $ (cfgDir </>) <$> [buildScript, runScript]
@@ -66,54 +75,63 @@ withProfile (ManageEnv {..}) withProf cfgDir = handle @IOError onIOErr $ do
     setEnv "XMONAD_CONFIG_DIR" cfgDir
     setEnv "XMONAD_CACHE_DIR" cacheDir
     setEnv "XMONAD_LOG_DIR" logDir
-  withProf $ Profile {profID = profileID, profProps = profileProps, ..}
+  withProf $ Profile{profID = profileID, profProps = profileProps, ..}
   where
     onIOErr = throwIO . ProfileIOError cfgDir
     locFor ident str = envPath </> str </> idStr ident
 
--- | Installs a profile.
+-- | Path of the runner file.
+runnerLinkPath profID = "/" </> "usr" </> "share" </> "xsessions" </> idStr profID <.> "desktop"
+
 installProfile :: ManageEnv -> Profile -> Executable -> IO ()
-installProfile mEnv@ManageEnv {logger} profile@Profile {..} sudo = do
+installProfile mEnv@ManageEnv{logger} profile@Profile{..} sudo = do
   -- Running setup
   writeFile startPath startScript
   _ <- setToExecutable startPath
   writeFile runnerPath (runner profProps)
-  callExe sudo ["ln", "-sf", runnerPath, runnerLinked]
+  callExe sudo ["ln", "-sf", runnerPath, runnerLinkPath profID]
 
   logger "Install using %s" (show profInstall)
   traverse_ (`callExe` []) profInstall
   buildProfile mEnv profile
   where
-    runnerLinked = "/usr" </> "share" </> "xsessions" </> idStr profID <.> "desktop"
     runnerPath = dataDir </> "run" <.> "desktop"
-    runner ProfileProps {..} =
+    runner ProfileProps{..} =
       unlines
-        [ printf "[Desktop Entry]",
-          printf "Encoding=UTF-8",
-          printf "Name=%s" profileName,
-          printf "Comment=%s" profileDetails,
-          printf "Exec=%s" startPath,
-          printf "Type=XSession"
+        [ printf "[Desktop Entry]"
+        , printf "Encoding=UTF-8"
+        , printf "Name=%s" profileName
+        , printf "Comment=%s" profileDetails
+        , printf "Exec=%s" startPath
+        , printf "Type=XSession"
         ]
 
     startPath = dataDir </> "starter.sh"
     startScript =
       unlines
-        [ printf "#!/bin/sh",
-          printf "export PATH=$HOME/.cabal/bin:$HOME/.ghcup/bin:$PATH",
-          printf
+        [ printf "#!/bin/sh"
+        , printf "export PATH=$HOME/.cabal/bin:$HOME/.ghcup/bin:$PATH"
+        , printf
             "exec xmonad-manage run %s > %s 2> %s"
             (idStr profID)
             (show $ logDir </> "start.log")
             (show $ logDir </> "start.err")
         ]
 
+removeProfile :: ManageEnv -> Profile -> Executable -> IO ()
+removeProfile ManageEnv{logger} Profile{..} sudo = do
+  -- NOTE: cfgDir is not removed, for obvious reasons
+  logger "Removing profile-specific directories"
+  traverse_ removePathForcibly [dataDir, cacheDir, logDir]
+  logger "Removing xsession runner, asking sudo"
+  callExe sudo ["rm", "-f", runnerLinkPath profID]
+
 buildProfile :: ManageEnv -> Profile -> IO ()
-buildProfile (ManageEnv {logger}) (Profile {cfgDir, profBuild}) = do
+buildProfile ManageEnv{logger} Profile{cfgDir, profBuild} = do
   logger "Build using %s" (show profBuild)
   withCurrentDirectory cfgDir $ callExe profBuild []
 
 runProfile :: ManageEnv -> Profile -> IO ()
-runProfile (ManageEnv {logger}) (Profile {profRun}) = do
+runProfile ManageEnv{logger} Profile{profRun} = do
   logger "Run using %s" (show profRun)
   callExe profRun []

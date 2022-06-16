@@ -40,26 +40,29 @@ manageOpts =
     mconcat
       [ Opts.command "update" $
           Opts.info (pure Update) $
-            Opts.progDesc "Updates xmonad-manage from source",
-        Opts.command "setup" $
+            Opts.progDesc "Updates xmonad-manage from source."
+      , Opts.command "setup" $
           Opts.info (pure Setup) $
-            Opts.progDesc "Sets up common components, including XMonad",
-        Opts.command "list" $
+            Opts.progDesc "Sets up common components, including XMonad."
+      , Opts.command "list" $
           Opts.info (pure ListProf) $
-            Opts.progDesc "Lists installed profiles",
-        Opts.command "install" $
+            Opts.progDesc "Lists installed profiles."
+      , Opts.command "install" $
           Opts.info (InstallProf <$> pathArg "<profile-path>") $
-            Opts.progDesc "Installs a profile",
-        Opts.command "build" $
+            Opts.progDesc "Installs a profile."
+      , Opts.command "remove" $
+          Opts.info (RemoveProf <$> profIdArg) $
+            Opts.progDesc "Removes a profile. Does not remove the cache files in '.cabal/store'."
+      , Opts.command "build" $
           Opts.info (BuildProf <$> profIdArg) $
-            Opts.progDesc "Builds a profile manually",
-        Opts.command "run" $
+            Opts.progDesc "Builds a profile manually."
+      , Opts.command "run" $
           Opts.info (RunProf <$> profIdArg) $
-            Opts.progDesc "Runs a profile",
-        -- Startup is manually switched for now.
+            Opts.progDesc "Runs a profile."
+      , -- Startup is manually switched for now.
         Opts.command "startup" $
           Opts.info (ChangeStart <$> pathArg "<startup-path>") $
-            Opts.progDesc "Change startup setups"
+            Opts.progDesc "Change startup setups."
       ]
   where
     pathArg name = Opts.strArgument $ Opts.metavar name <> Opts.action "directory"
@@ -71,8 +74,8 @@ main = (`catch` handleError) $ do
   cmdLine <- unwords <$> getArgs
   saved <- get varMS
   let logger str = printf (printf "[%s] %s\n" cmdLine str)
-      ManageSaved {managePath = envPath, profiles, startupDir} = saved
-      mEnv = ManageEnv {envPath, logger}
+      ManageSaved{managePath = envPath, profiles, startupDir} = saved
+      mEnv = ManageEnv{envPath, logger}
       getProfile profID =
         maybe (throwIO $ ProfileNotFound profID) pure $ profiles M.!? profID
 
@@ -100,8 +103,8 @@ main = (`catch` handleError) $ do
     ListProf -> do
       logger "Available profiles:"
       for_ (M.elems profiles) $
-        withProfile mEnv $ \Profile {profID, profProps, cfgDir} -> do
-          let ProfileProps {..} = profProps
+        withProfile mEnv $ \Profile{profID, profProps, cfgDir} -> do
+          let ProfileProps{..} = profProps
           printf "- %s (%s)\n" (idStr profID) profileName
           printf "    Config at: %s\n" cfgDir
           printf "    %s\n" profileDetails
@@ -110,16 +113,23 @@ main = (`catch` handleError) $ do
     InstallProf rawPath -> do
       cfgPath <- canonicalizePath rawPath
       logger "Begin"
-      let onProfile prof@Profile {profID} = do
+      let onProfile prof@Profile{profID} = do
             getExecutable "sudo" >>= installProfile mEnv prof
             let addProfile = M.insert profID cfgPath
-            varMS $~ \saved@ManageSaved {profiles} -> saved {profiles = addProfile profiles}
+            varMS $~ \saved@ManageSaved{profiles} -> saved{profiles = addProfile profiles}
       withProfile mEnv onProfile cfgPath
       logger "End"
 
     -- Remove a profile
-    RemoveProf _profID -> do
-      undefined
+    RemoveProf profID -> do
+      cfgPath <- getProfile profID
+      logger "Begin"
+      let onProfile prof@Profile{profID} = do
+            getExecutable "sudo" >>= removeProfile mEnv prof
+            let rmProfile = M.delete profID
+            varMS $~ \saved@ManageSaved{profiles} -> saved{profiles = rmProfile profiles}
+      withProfile mEnv onProfile cfgPath
+      logger "End"
 
     -- Manually build profile
     BuildProf profID -> do
@@ -144,7 +154,7 @@ main = (`catch` handleError) $ do
       startupDir <- canonicalizePath rawPath
       logger "Begin"
       _ <- getStartup startupDir -- This checks if startup directory is valid
-      varMS $~ \saved -> saved {startupDir}
+      varMS $~ \saved -> saved{startupDir}
       logger "Startup manage directory set to %s" startupDir
       logger "End"
   where
