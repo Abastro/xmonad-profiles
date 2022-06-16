@@ -25,6 +25,7 @@ data Action
   | Setup
   | ListProf
   | InstallProf FilePath
+  | RemoveProf ID
   | BuildProf ID
   | RunProf ID
   | ChangeStart FilePath
@@ -115,6 +116,10 @@ main = (`catch` handleError) $ do
             varMS $~ \saved@ManageSaved {profiles} -> saved {profiles = addProfile profiles}
       withProfile mEnv onProfile cfgPath
       logger "End"
+
+    -- Remove a profile
+    RemoveProf _profID -> do
+      undefined
 
     -- Manually build profile
     BuildProf profID -> do

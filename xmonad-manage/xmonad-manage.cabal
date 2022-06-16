@@ -8,6 +8,8 @@ license-file:       LICENSE
 author:             Abastro
 maintainer:         abab9579@gmail.com
 copyright:          2022 Abastro
+extra-source-files:
+  CHANGELOG.md
 
 executable xmonad-manage
   main-is:          Main.hs
