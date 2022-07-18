@@ -30,7 +30,7 @@ executable xmonad-manage
     , mtl ==2.2.*
     , bytestring ==0.11.*
     , text ==2.0.*
-    , process ==1.6.*
+    , process ^>= 1.6.14
     , parsec  ==3.1.*
     , optparse-applicative ==0.17.*
     , HsYAML ==0.2.*
