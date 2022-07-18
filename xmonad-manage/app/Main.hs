@@ -70,6 +70,9 @@ manageOpts =
 -- | The manager program. Current directory needs to be the profile main directory.
 main :: IO ()
 main = (`catch` handleError) $ do
+  -- Sets to line buffering
+  hSetBuffering stdout LineBuffering
+
   cmdLine <- unwords <$> getArgs
   saved <- get varMS
   let logger str = printf (printf "[%s] %s\n" cmdLine str)
