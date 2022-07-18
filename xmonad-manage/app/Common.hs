@@ -1,21 +1,20 @@
 {-# LANGUAGE DerivingStrategies #-}
 
 -- | Checked stuffs.
-module Common
-  ( Executable,
-    callExe,
-    exeToProc,
-    setToExecutable,
-    getExecutable,
-    mayExecutable,
-    dataVar,
-    ID,
-    idStr,
-    makeID,
-    makeIDM,
-    readYAMLFile,
-  )
-where
+module Common (
+  Executable,
+  callExe,
+  exeToProc,
+  setToExecutable,
+  getExecutable,
+  mayExecutable,
+  dataVar,
+  ID,
+  idStr,
+  makeID,
+  makeIDM,
+  readYAMLFile,
+) where
 
 import Control.Applicative
 import Control.Exception
@@ -27,7 +26,9 @@ import Data.Serialize
 import Data.StateVar
 import Data.Text qualified as T
 import Data.YAML
+import GHC.IO.Exception (IOErrorType (OtherError))
 import System.Directory
+import System.Exit
 import System.FilePath
 import System.IO
 import System.IO.Error
@@ -38,8 +39,14 @@ import Text.Printf
 newtype Executable = Executable FilePath
   deriving (Show)
 
+-- | Calls the executable without delegating ctrl+C.
 callExe :: Executable -> [String] -> IO ()
-callExe = coerce callProcess
+callExe (Executable exe) args =
+  withCreateProcess (proc exe args) (\_ _ _ p -> waitForProcess p) >>= \case
+    ExitSuccess -> pure ()
+    ExitFailure code ->
+      ioError $
+        mkIOError OtherError (printf "%s: received exit code %d" (unwords $ exe : args) code) Nothing Nothing
 
 exeToProc :: Executable -> [String] -> CreateProcess
 exeToProc = coerce proc
