@@ -13,7 +13,6 @@ import System.Directory
 import System.Environment
 import System.Exit
 import System.IO
-import System.Process
 import Text.Printf
 
 -- NOTE Fetches from separate configuration directory for each profile.
@@ -96,7 +95,9 @@ main = (`catch` handleError) $ do
       logger "Begin"
       findExecutable "xmonad" >>= \case
         Just _ -> logger "xmonad found in PATH"
-        Nothing -> callCommand "cabal install xmonad"
+        Nothing -> do
+          cabal <- getExecutable "cabal"
+          callExe cabal ["install", "xmonad"]
       logger "Install startup"
       getStartup startupDir >>= installStartup
       logger "End"
