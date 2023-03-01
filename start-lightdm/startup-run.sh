@@ -26,6 +26,8 @@ xset s 3000 dpms 3600 3600 3600
 # Keyring-daemon for e.g. ssh keys
 gnome-keyring-daemon --start --components=gpg,pkcs11,secrets,ssh
 
+# Workaround for dbus being displayed first
+dbus-update-activation-environment GDK_SCALE GDK_DPI_SCALE QT_AUTO_SCREEN_SCALE_FACTOR
 
 # Set root cursor
 xsetroot -cursor_name left_ptr

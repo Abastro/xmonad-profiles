@@ -1,7 +1,6 @@
 module Startup where
 
 import Common
-import Data.Bifunctor (bimap)
 import Data.Foldable
 import Data.Map.Strict qualified as M
 import Data.Text qualified as T
@@ -37,5 +36,5 @@ installStartup Startup {..} = do
 
 runStartup :: Startup -> IO ()
 runStartup Startup {..} = do
+  for_ (M.toList startEnv) $ \(key, val) -> setEnv (T.unpack key) (T.unpack val)
   callProcess startRun []
-  traverse_ (uncurry setEnv) (bimap T.unpack T.unpack <$> M.toList startEnv)
