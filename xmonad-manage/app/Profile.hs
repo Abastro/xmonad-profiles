@@ -40,7 +40,8 @@ data ProfileCfg = ProfileCfg
 instance FromYAML ProfileCfg where
   parseYAML = withMap "profile" $ \m ->
     ProfileCfg
-      <$> m .: T.pack "ID"
+      <$> m
+      .: T.pack "ID"
       <*> (ProfileProps <$> m .: T.pack "name" <*> m .: T.pack "details")
       <*> (fmap T.unpack <$> m .:? T.pack "install")
       <*> (T.unpack <$> m .: T.pack "build")
@@ -76,9 +77,9 @@ withProfile ManageEnv{..} cfgDir withProf = handle @IOError onIOErr $ do
     setEnv "XMONAD_CACHE_DIR" cacheDir
     setEnv "XMONAD_LOG_DIR" logDir
   withProf $ Profile{profID = profileID, profProps = profileProps, ..}
-  where
-    onIOErr = throwIO . ProfileIOError cfgDir
-    locFor ident str = envPath </> str </> idStr ident
+ where
+  onIOErr = throwIO . ProfileIOError cfgDir
+  locFor ident str = envPath </> str </> idStr ident
 
 -- | Path of the runner file.
 runnerLinkPath profID = "/" </> "usr" </> "share" </> "xsessions" </> idStr profID <.> "desktop"
@@ -92,34 +93,35 @@ installProfile mEnv@ManageEnv{logger} profile@Profile{..} sudo = do
   writeFile startPath startScript
   _ <- setToExecutable startPath
   writeFile runnerPath (runner profProps)
-  callExe sudo ["ln", "-sf", runnerPath, runnerLinkPath profID]
+  -- Instead of linking, we copy the runner. Fixes issues with SDDM.
+  callExe sudo ["cp", "-T", runnerPath, runnerLinkPath profID]
 
   logger "Install using %s" (show profInstall)
   traverse_ (`callExe` []) profInstall
   buildProfile mEnv profile
-  where
-    runnerPath = dataDir </> "run" <.> "desktop"
-    runner ProfileProps{..} =
-      unlines
-        [ printf "[Desktop Entry]"
-        , printf "Encoding=UTF-8"
-        , printf "Name=%s" profileName
-        , printf "Comment=%s" profileDetails
-        , printf "Exec=%s" startPath
-        , printf "Type=XSession"
-        ]
+ where
+  runnerPath = dataDir </> "run" <.> "desktop"
+  runner ProfileProps{..} =
+    unlines
+      [ printf "[Desktop Entry]"
+      , printf "Encoding=UTF-8"
+      , printf "Type=XSession"
+      , printf "Name=%s" profileName
+      , printf "Comment=%s" profileDetails
+      , printf "Exec=%s" startPath
+      ]
 
-    startPath = dataDir </> "starter.sh"
-    startScript =
-      unlines
-        [ printf "#!/bin/sh"
-        , printf "export PATH=$HOME/.cabal/bin:$HOME/.ghcup/bin:$PATH"
-        , printf
-            "exec xmonad-manage run %s > %s 2> %s"
-            (idStr profID)
-            (show $ logDir </> "start.log")
-            (show $ logDir </> "start.err")
-        ]
+  startPath = dataDir </> "starter.sh"
+  startScript =
+    unlines
+      [ printf "#!/bin/sh"
+      , printf "export PATH=$HOME/.cabal/bin:$HOME/.ghcup/bin:$PATH"
+      , printf
+          "exec xmonad-manage run %s > %s 2> %s"
+          (idStr profID)
+          (show $ logDir </> "start.log")
+          (show $ logDir </> "start.err")
+      ]
 
 removeProfile :: ManageEnv -> Profile -> Executable -> IO ()
 removeProfile ManageEnv{logger} Profile{..} sudo = do
