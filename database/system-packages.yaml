@@ -1,0 +1,26 @@
+installer:
+  ubuntu: "apt install"
+  arch: "pacman -Syu"
+# Known packages
+packages:
+  # picom requires ubuntu 22.04+
+  picom:
+    ubuntu: "picom"
+    arch: "picom"
+  policykit-gnome:
+    ubuntu: "policykit-1-gnome"
+    arch: "polkit-gnome"
+  policykit-kde:
+    ubuntu: "polkit-kde-agent-1"
+    arch: "polkit-kde-agent"
+  light-locker:
+    ubuntu: "light-locker"
+    arch: "light-locker"
+  xss-lock:
+    ubuntu: "xss-lock"
+    arch: "xss-lock"
+  suckless-tools:
+    ubuntu: "suckless-tools"
+  gnome-keyring:
+    ubuntu: "gnome-keyring"
+    arch: "gnome-keyring"

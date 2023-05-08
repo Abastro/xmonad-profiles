@@ -1,3 +1,10 @@
+display-standard: X11
+dependency:
+  - suckless-tools
+  - light-locker
+  - xss-lock
+  - policykit-gnome
+  - gnome-keyring
 install: "./startup-install.sh"
 run: "./startup-run.sh"
 environment:
