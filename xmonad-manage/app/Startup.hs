@@ -21,6 +21,7 @@ data Startup = Startup
   deriving (Show)
 
 instance FromYAML Startup where
+  parseYAML :: Node Pos -> Parser Startup
   parseYAML = withMap "startup" $ \m ->
     Startup
       <$> (T.unpack <$> m .: T.pack "install")
@@ -43,7 +44,9 @@ installStartup _ pkgDb distro Startup{..} = do
 runStartup :: ManageEnv -> Startup -> IO ()
 runStartup ManageEnv{..} Startup{..} = do
   for_ (M.toList startEnv) $ \(key, val) -> setEnv (T.unpack key) (T.unpack val)  
-  startX11 -- Also starts X11 here now
+  -- X11 is handled here
+  startX11
+  -- Specific startups
   callProcess startRun []
   where
     startX11 = do

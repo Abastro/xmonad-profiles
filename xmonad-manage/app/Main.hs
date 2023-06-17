@@ -119,8 +119,9 @@ main = (`catch` handleError) $ do
     InstallProf rawPath -> do
       cfgPath <- canonicalizePath rawPath
       logger "Begin"
+      distro <- findDistro mEnv
       let onProfile prof@Profile{profID} = do
-            getExecutable "sudo" >>= installProfile mEnv prof
+            withDatabase mEnv $ \pkgDb -> getExecutable "sudo" >>= installProfile mEnv pkgDb distro prof
             let addProfile = M.insert profID cfgPath
             varMS $~ \saved@ManageSaved{profiles} -> saved{profiles = addProfile profiles}
       withProfile mEnv cfgPath onProfile

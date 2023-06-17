@@ -20,6 +20,7 @@ import System.Environment
 import System.FilePath
 import System.Info (arch, os)
 import Text.Printf
+import Packages
 
 -- | Profile Properties
 data ProfileProps = ProfileProps
@@ -34,10 +35,12 @@ data ProfileCfg = ProfileCfg
   , profileProps :: !ProfileProps
   , installScript :: !(Maybe FilePath)
   , buildScript, runScript :: !FilePath
+  , dependencies :: [Package]
   }
   deriving (Show)
 
 instance FromYAML ProfileCfg where
+  parseYAML :: Node Pos -> Parser ProfileCfg
   parseYAML = withMap "profile" $ \m ->
     ProfileCfg
       <$> m
@@ -46,6 +49,7 @@ instance FromYAML ProfileCfg where
       <*> (fmap T.unpack <$> m .:? T.pack "install")
       <*> (T.unpack <$> m .: T.pack "build")
       <*> (T.unpack <$> m .: T.pack "run")
+      <*> (m .: T.pack "dependencies")
 
 -- | Profile. Requires the config path to exist.
 data Profile = Profile
@@ -54,6 +58,7 @@ data Profile = Profile
   , profInstall :: !(Maybe Executable)
   , profBuild, profRun :: !Executable
   , cfgDir, dataDir, cacheDir, logDir :: !FilePath
+  , profDeps :: [Package]
   }
 
 data ProfileError
@@ -76,7 +81,7 @@ withProfile ManageEnv{..} cfgDir withProf = handle @IOError onIOErr $ do
     setEnv "XMONAD_CONFIG_DIR" cfgDir
     setEnv "XMONAD_CACHE_DIR" cacheDir
     setEnv "XMONAD_LOG_DIR" logDir
-  withProf $ Profile{profID = profileID, profProps = profileProps, ..}
+  withProf $ Profile{profID = profileID, profProps = profileProps, profDeps = dependencies, ..}
  where
   onIOErr = throwIO . ProfileIOError cfgDir
   locFor ident str = envPath </> str </> idStr ident
@@ -84,8 +89,8 @@ withProfile ManageEnv{..} cfgDir withProf = handle @IOError onIOErr $ do
 -- | Path of the runner file.
 runnerLinkPath profID = "/" </> "usr" </> "share" </> "xsessions" </> idStr profID <.> "desktop"
 
-installProfile :: ManageEnv -> Profile -> Executable -> IO ()
-installProfile mEnv@ManageEnv{logger} profile@Profile{..} sudo = do
+installProfile :: ManageEnv -> PkgDatabase -> Distro -> Profile -> Executable -> IO ()
+installProfile mEnv@ManageEnv{logger} pkgDb distro profile@Profile{..} sudo = do
   -- Prepares directories
   traverse_ (createDirectoryIfMissing True) [dataDir, cacheDir, logDir]
 
@@ -95,6 +100,9 @@ installProfile mEnv@ManageEnv{logger} profile@Profile{..} sudo = do
   writeFile runnerPath (runner profProps)
   -- Instead of linking, we copy the runner. Fixes issues with SDDM.
   callExe sudo ["cp", "-T", runnerPath, runnerLinkPath profID]
+
+  logger "Installing dependencies"
+  installPackages pkgDb distro profDeps
 
   logger "Install using %s" (show profInstall)
   traverse_ (`callExe` []) profInstall
@@ -125,7 +133,7 @@ installProfile mEnv@ManageEnv{logger} profile@Profile{..} sudo = do
 
 removeProfile :: ManageEnv -> Profile -> Executable -> IO ()
 removeProfile ManageEnv{logger} Profile{..} sudo = do
-  -- NOTE: cfgDir is not removed, for obvious reasons
+  -- NOTE: cfgDir is not removed, as it is the source of the entire installation
   logger "Removing profile-specific directories"
   traverse_ removePathForcibly [dataDir, cacheDir, logDir]
   logger "Removing xsession runner, asking sudo"

@@ -36,12 +36,11 @@ data PkgDatabase = AsPkgDatabase
   deriving (Show)
 
 instance FromYAML PkgDatabase where
+  parseYAML :: Node Pos -> Parser PkgDatabase
   parseYAML = withMap "system-packages" $ \m ->
     AsPkgDatabase
-      <$> m
-      .: T.pack "installer"
-      <*> m
-      .: T.pack "pacakges"
+      <$> (m .: T.pack "installer")
+      <*> (m .: T.pack "pacakges")
 
 data PkgsError
   = DatabaseMalformed String
@@ -62,7 +61,7 @@ findDistro ManageEnv{..} = do
   mayDistro <- stripPrefix "Distributor ID: " <$> readExe lsbRel ["-i"]
   case mayDistro of
     Nothing -> do
-      logger "lsb_release did not return valid distro"
+      logger "lsb_release did not return a valid distro"
       throwIO (UnknownDistro $ AsDistro (T.pack "invalid"))
     Just distro -> pure (AsDistro $ T.pack distro)
 
