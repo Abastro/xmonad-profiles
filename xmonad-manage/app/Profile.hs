@@ -102,7 +102,7 @@ installProfile mEnv@ManageEnv{logger} pkgDb distro profile@Profile{..} sudo = do
   callExe sudo ["cp", "-T", runnerPath, runnerLinkPath profID]
 
   logger "Installing dependencies"
-  installPackages pkgDb distro profDeps
+  installPackages mEnv pkgDb distro profDeps
 
   logger "Install using %s" (show profInstall)
   traverse_ (`callExe` []) profInstall

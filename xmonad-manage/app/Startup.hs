@@ -36,9 +36,9 @@ getStartup startupDir = do
   pure Startup{startInstall = startupDir </> startInstall, startRun = startupDir </> startRun, ..}
 
 installStartup :: ManageEnv -> PkgDatabase -> Distro -> Startup -> IO ()
-installStartup _ pkgDb distro Startup{..} = do
+installStartup mEnv pkgDb distro Startup{..} = do
   [reqs, _] <- traverse setToExecutable [startInstall, startRun]
-  installPackages pkgDb distro dependencies
+  installPackages mEnv pkgDb distro dependencies
   callExe reqs []
 
 runStartup :: ManageEnv -> Startup -> IO ()

@@ -71,15 +71,17 @@ withDatabase ManageEnv{..} withDb = do
   withDb pkgDatabase
 
 -- MAYBE Add e.g. Cabal-installable dependencies?
-installPackages :: PkgDatabase -> Distro -> [Package] -> IO ()
-installPackages AsPkgDatabase{..} distro deps = do
+installPackages :: ManageEnv -> PkgDatabase -> Distro -> [Package] -> IO ()
+installPackages ManageEnv{..} AsPkgDatabase{..} distro deps = do
   installCmd <- case installer M.!? distro of
     Just inst -> pure inst
     Nothing -> throwIO (UnknownDistro distro)
+  logger "Installer command: %s" (T.unpack installCmd)
 
   toInstall <- case partitionEithers $ map findPackage deps of
     ([], descripts) -> pure descripts
     (errs, _) -> throwIO (PackageErrors errs)
+  logger "Installing dependencies %s..." (show toInstall)
 
   sudo <- getExecutable "sudo"
   callExe sudo $ words (T.unpack installCmd) <> map T.unpack toInstall
