@@ -1,5 +1,4 @@
-display-standard: X11
-dependency:
+dependencies:
   - picom
   - policykit-kde
   - gnome-keyring

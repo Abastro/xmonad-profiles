@@ -1,5 +1,4 @@
-display-standard: X11
-dependency:
+dependencies:
   - suckless-tools
   - light-locker
   - xss-lock

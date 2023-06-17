@@ -4,6 +4,7 @@
 module Common (
   Executable,
   callExe,
+  readExe,
   exeToProc,
   setToExecutable,
   getExecutable,
@@ -47,6 +48,10 @@ callExe (Executable exe) args =
     ExitFailure code ->
       ioError $
         mkIOError OtherError (printf "%s: received exit code %d" (unwords $ exe : args) code) Nothing Nothing
+
+readExe :: Executable -> [String] -> IO String
+readExe (Executable exe) args = do
+  readProcess exe args []
 
 exeToProc :: Executable -> [String] -> CreateProcess
 exeToProc = coerce proc

@@ -5,6 +5,7 @@ import Control.Exception
 import Data.Foldable
 import Data.Map.Strict qualified as M
 import Data.StateVar
+import Packages
 import Manages
 import Options.Applicative qualified as Opts
 import Profile
@@ -93,13 +94,15 @@ main = (`catch` handleError) $ do
     -- Main installation
     Setup -> do
       logger "Begin"
+      distro <- findDistro mEnv
       findExecutable "xmonad" >>= \case
         Just _ -> logger "xmonad found in PATH"
         Nothing -> do
           cabal <- getExecutable "cabal"
           callExe cabal ["install", "xmonad"]
       logger "Install startup"
-      getStartup startupDir >>= installStartup
+      startup <- getStartup startupDir
+      withDatabase mEnv $ \pkgDb -> installStartup mEnv pkgDb distro startup
       logger "End"
 
     -- Lists installed profiles
@@ -146,7 +149,7 @@ main = (`catch` handleError) $ do
       cfgPath <- getProfile profID
       withCurrentDirectory home $ do
         logger "Setup"
-        getStartup startupDir >>= runStartup
+        getStartup startupDir >>= runStartup mEnv
         logger "Booting xmonad"
         withProfile mEnv cfgPath (runProfile mEnv)
         logger "Exit"
