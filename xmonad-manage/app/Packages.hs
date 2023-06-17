@@ -18,6 +18,7 @@ import Data.Text qualified as T
 import Data.YAML
 import Manages
 import System.FilePath
+import Data.Maybe
 
 newtype Distro = AsDistro T.Text
   deriving stock (Show, Eq, Ord)
@@ -27,10 +28,12 @@ newtype Package = AsPackage T.Text
   deriving stock (Show, Eq, Ord)
   deriving newtype (FromYAML)
 
--- | Rudimentary package database.
--- Not a proper DB, and is never meant to be.
+{- | Rudimentary package database.
+Not a proper DB, and is never meant to be.
+-}
 data PkgDatabase = AsPkgDatabase
-  { installer :: !(M.Map Distro T.Text)
+  { derivatives :: !(M.Map Distro Distro)
+  , installer :: !(M.Map Distro T.Text)
   , packages :: !(M.Map Package (M.Map Distro T.Text))
   }
   deriving (Show)
@@ -39,8 +42,9 @@ instance FromYAML PkgDatabase where
   parseYAML :: Node Pos -> Parser PkgDatabase
   parseYAML = withMap "system-packages" $ \m ->
     AsPkgDatabase
-      <$> (m .: T.pack "installer")
-      <*> (m .: T.pack "pacakges")
+      <$> (m .: T.pack "derivatives")
+      <*> (m .: T.pack "installer")
+      <*> (m .: T.pack "packages")
 
 data PkgsError
   = DatabaseMalformed String
@@ -58,12 +62,12 @@ instance Exception PkgsError
 findDistro :: ManageEnv -> IO Distro
 findDistro ManageEnv{..} = do
   lsbRel <- getExecutable "lsb_release"
-  mayDistro <- stripPrefix "Distributor ID: " <$> readExe lsbRel ["-i"]
-  case mayDistro of
+  got <- readExe lsbRel ["-i"]
+  case stripPrefix "Distributor ID:" got of
     Nothing -> do
-      logger "lsb_release did not return a valid distro"
+      logger "lsb_release failed, gave %s" got
       throwIO (UnknownDistro $ AsDistro (T.pack "invalid"))
-    Just distro -> pure (AsDistro $ T.pack distro)
+    Just distro -> pure (AsDistro . T.strip $ T.pack distro)
 
 withDatabase :: ManageEnv -> (PkgDatabase -> IO a) -> IO a
 withDatabase ManageEnv{..} withDb = do
@@ -73,9 +77,9 @@ withDatabase ManageEnv{..} withDb = do
 -- MAYBE Add e.g. Cabal-installable dependencies?
 installPackages :: ManageEnv -> PkgDatabase -> Distro -> [Package] -> IO ()
 installPackages ManageEnv{..} AsPkgDatabase{..} distro deps = do
-  installCmd <- case installer M.!? distro of
+  installCmd <- case installer M.!? originDistro of
     Just inst -> pure inst
-    Nothing -> throwIO (UnknownDistro distro)
+    Nothing -> throwIO (UnknownDistro originDistro)
   logger "Installer command: %s" (T.unpack installCmd)
 
   toInstall <- case partitionEithers $ map findPackage deps of
@@ -85,9 +89,11 @@ installPackages ManageEnv{..} AsPkgDatabase{..} distro deps = do
 
   sudo <- getExecutable "sudo"
   callExe sudo $ words (T.unpack installCmd) <> map T.unpack toInstall
-  where
-    findPackage pkgKey = case packages M.!? pkgKey of
-      Nothing -> Left (UnknownPackage pkgKey)
-      Just package -> case package M.!? distro of
-        Nothing -> Left (NotAvailableInDistro pkgKey distro)
-        Just descript -> Right descript
+ where
+  originDistro = fromMaybe distro (derivatives M.!? distro)
+
+  findPackage pkgKey = case packages M.!? pkgKey of
+    Nothing -> Left (UnknownPackage pkgKey)
+    Just package -> case package M.!? originDistro of
+      Nothing -> Left (NotAvailableInDistro pkgKey originDistro)
+      Just descript -> Right descript

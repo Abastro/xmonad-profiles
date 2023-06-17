@@ -1,3 +1,7 @@
+# Derivatives use the same naming scheme, so they are grouped together.
+# Ubuntu is derivative of Debian, maybe better to merge
+derivatives:
+  EndeavourOS: "arch"
 installer:
   ubuntu: "apt install"
   arch: "pacman -Syu"
