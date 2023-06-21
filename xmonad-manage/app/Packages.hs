@@ -2,7 +2,7 @@
 
 module Packages (
   Distro (..),
-  Package,
+  Package (..),
   PkgDatabase,
   withDatabase,
   installPackages,

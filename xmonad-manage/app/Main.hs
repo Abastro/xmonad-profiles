@@ -15,6 +15,7 @@ import System.Environment
 import System.Exit
 import System.IO
 import Text.Printf
+import qualified Data.Text as T
 
 -- NOTE Fetches from separate configuration directory for each profile.
 -- TODO Maybe do not install system packages, and instead check for existence of packages?
@@ -96,14 +97,17 @@ main = (`catch` handleError) $ do
     Setup -> do
       logger "Begin"
       distro <- findDistro mEnv
-      findExecutable "xmonad" >>= \case
-        Just _ -> logger "xmonad found in PATH"
-        Nothing -> do
-          cabal <- getExecutable "cabal"
-          callExe cabal ["install", "xmonad"]
-      logger "Install startup"
-      startup <- getStartup startupDir
-      withDatabase mEnv $ \pkgDb -> installStartup mEnv pkgDb distro startup
+      withDatabase mEnv $ \pkgDb -> do
+      -- libxss is needed for xmonad, so this is hard-coded
+        installPackages mEnv pkgDb distro [AsPackage $ T.pack "libxss"]
+        findExecutable "xmonad" >>= \case
+          Just _ -> logger "xmonad found in PATH"
+          Nothing -> do
+            cabal <- getExecutable "cabal"
+            callExe cabal ["install", "xmonad"]
+        logger "Install startup"
+        startup <- getStartup startupDir
+        installStartup mEnv pkgDb distro startup
       logger "End"
 
     -- Lists installed profiles

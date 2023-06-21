@@ -2,6 +2,7 @@
 # Ubuntu is derivative of Debian, maybe better to merge
 derivatives:
   EndeavourOS: "arch"
+  Ubuntu: "ubuntu" # Upper case problems
 installer:
   ubuntu: "apt install"
   arch: "pacman -Syu"
@@ -26,20 +27,29 @@ packages:
     ubuntu: "xss-lock"
     arch: "xss-lock"
 # Development
+  libxss:
+    ubuntu: "libxss-dev"
+    arch: "libxss"
   alsa-dev:
-    ubuntu: "libasound-dev"
+    ubuntu: "libasound2-dev"
     arch: "alsa-lib"
   gtk3-dev:
     ubuntu: "libgtk-3-dev"
     arch: "gtk3"
-  gobject-introspection:
-    ubuntu: "gobject-introspection"
+  libgirepository:
+    ubuntu: "libgirepository1.0-dev"
     arch: "gobject-introspection"
+  libdbusmenu-gtk3:
+    ubuntu: "libdbusmenu-gtk3-dev"
+    arch: "libdbusmenu-gtk3"
 # UIs
   synapse:
     ubuntu: "synapse"
     arch: "synapse"
 # System Control
+  feh:
+    ubuntu: "feh"
+    arch: "feh"
   light:
     ubuntu: "light"
     arch: "light"
