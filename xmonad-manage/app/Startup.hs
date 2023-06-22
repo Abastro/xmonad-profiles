@@ -56,6 +56,6 @@ runStartup ManageEnv{..} Startup{..} = do
       -- Copy X resources
       copyFile (envPath </> "database" </> ".Xresources") (homeDir </> ".Xresources")
       -- Load X resources
-      callProcess "xrdb" ["-merge", "~/.Xresources"]
+      callProcess "xrdb" ["-merge", homeDir </> ".Xresources"]
       -- Set root cursor
       callProcess "xsetroot" ["-cursor_name", "left_ptr"]

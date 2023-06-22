@@ -21,6 +21,7 @@ import Text.Printf
 
 -- TODO Maybe do not install system packages, and instead check for existence of packages?
 -- TODO Stay up-to-date appropriately corresponding to GHC Updates - How?
+-- If this were statically compiled, it would not matter, but it will take more size.
 -- Need analyzing dependencies - e.g. PulpMonad relies a lot on Gnome environment.
 
 data Action
