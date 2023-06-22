@@ -18,7 +18,9 @@ import System.IO
 import Text.Printf
 
 -- NOTE Fetches from separate configuration directory for each profile.
+
 -- TODO Maybe do not install system packages, and instead check for existence of packages?
+-- TODO Stay up-to-date appropriately corresponding to GHC Updates - How?
 -- Need analyzing dependencies - e.g. PulpMonad relies a lot on Gnome environment.
 
 data Action
