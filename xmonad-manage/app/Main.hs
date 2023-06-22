@@ -5,9 +5,10 @@ import Control.Exception
 import Data.Foldable
 import Data.Map.Strict qualified as M
 import Data.StateVar
-import Packages
+import Data.Text qualified as T
 import Manages
 import Options.Applicative qualified as Opts
+import Packages
 import Profile
 import Startup
 import System.Directory
@@ -15,7 +16,6 @@ import System.Environment
 import System.Exit
 import System.IO
 import Text.Printf
-import qualified Data.Text as T
 
 -- NOTE Fetches from separate configuration directory for each profile.
 -- TODO Maybe do not install system packages, and instead check for existence of packages?
@@ -23,6 +23,7 @@ import qualified Data.Text as T
 
 data Action
   = Update
+  | ResetSave
   | Setup
   | ListProf
   | InstallProf FilePath
@@ -42,6 +43,9 @@ manageOpts =
       [ Opts.command "update" $
           Opts.info (pure Update) $
             Opts.progDesc "Updates xmonad-manage from source."
+      , Opts.command "reset-save" $
+          Opts.info (pure ResetSave) $
+            Opts.progDesc "Resets xmonad-manage save for when it is corrupted."
       , Opts.command "setup" $
           Opts.info (pure Setup) $
             Opts.progDesc "Sets up common components, including XMonad."
@@ -93,12 +97,19 @@ main = (`catch` handleError) $ do
         get varMS -- In case it is updated, need to reset!
       logger "Updated"
 
+    -- Resets the save if corrupted
+    ResetSave -> do
+      logger "*** Resetting save, data could be lost! ***"
+      newMS <- mkMS
+      varMS $= newMS
+      logger "Save reset"
+
     -- Main installation
     Setup -> do
       logger "Begin"
       distro <- findDistro mEnv
       withDatabase mEnv $ \pkgDb -> do
-      -- libxss is needed for xmonad, so this is hard-coded
+        -- libxss is needed for xmonad, so this is hard-coded
         installPackages mEnv pkgDb distro [AsPackage $ T.pack "libxss"]
         findExecutable "xmonad" >>= \case
           Just _ -> logger "xmonad found in PATH"

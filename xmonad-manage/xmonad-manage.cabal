@@ -24,7 +24,7 @@ executable xmonad-manage
     RecordWildCards
     NoFieldSelectors
   build-depends:
-      base ^>=4.16.1.0
+      base ^>=4.17.1.0
     , filepath
     , directory
     , containers ==0.6.*

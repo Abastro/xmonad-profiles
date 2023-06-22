@@ -1,6 +1,7 @@
 module Manages
   ( ManageSaved (..),
     ManageEnv (..),
+    mkMS,
     varMS,
   )
 where
@@ -28,8 +29,11 @@ data ManageEnv = ManageEnv
     logger :: forall r. PrintfType r => String -> r
   }
 
-varMS :: StateVar ManageSaved
-varMS = dataVar "xmonad-manage" "manage-data" $ do
+mkMS :: IO ManageSaved
+mkMS = do
   putStrLn "Manager path not yet specified, setting to current directory"
   managePath <- getCurrentDirectory
-  pure $ ManageSaved {managePath, profiles = M.empty, startupDir = managePath </> "start-basic"}
+  pure $ ManageSaved {managePath, profiles = M.empty, startupDir = managePath </> "start-lightdm"}
+
+varMS :: StateVar ManageSaved
+varMS = dataVar "xmonad-manage" "manage-data" mkMS
