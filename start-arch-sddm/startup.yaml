@@ -11,5 +11,8 @@ environment:
   QT4_IM_MODULE:  "ibus"
   QT_IM_MODULE:   "ibus"
 
+  # SSH Auth
+  SSH_AUTH_SOCK:  "${XDG_RUNTIME_DIR}/keyring/ssh"
+
   # HiDPI scales
   QT_AUTO_SCREEN_SCALE_FACTOR: "1"

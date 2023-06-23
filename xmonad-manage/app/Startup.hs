@@ -44,9 +44,25 @@ installStartup mEnv pkgDb distro Startup{..} = do
 
 runStartup :: ManageEnv -> Startup -> IO ()
 runStartup mEnv Startup{..} = do
-  for_ (M.toList startEnv) $ \(key, val) -> setEnv (T.unpack key) (T.unpack val)
+  for_ (M.toList startEnv) $ \(key, val) -> do
+    formatted <- formatValue val
+    setEnv (T.unpack key) (T.unpack formatted)
   startX11 mEnv -- X11 is handled here
   callProcess startRun [] -- Specific startups
+  where
+    pref = T.pack "${"
+    suff = T.pack "}"
+    -- FIXME Proper shell variable expansion support
+    formatValue val =
+      case T.stripPrefix pref postIncluding of
+        Just post
+          | (var, postIncl) <- T.breakOn suff post
+          , Just postpost <- T.stripPrefix suff postIncl -> do
+              subst <- T.pack <$> getEnv (T.unpack var)
+              pure (pre <> subst <> postpost)
+        _ -> pure val
+      where
+        (pre, postIncluding) = T.breakOn pref val
 
 installX11 :: ManageEnv -> PkgDatabase -> Distro -> IO ()
 installX11 mEnv@ManageEnv{..} pkgDb distro = do
