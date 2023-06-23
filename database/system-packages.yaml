@@ -46,7 +46,13 @@ packages:
   synapse:
     ubuntu: "synapse"
     arch: "synapse"
+  gnome-screenshot:
+    ubuntu: "gnome-screenshot"
+    arch: "gnome-screenshot"
 # System Control
+  xsettingsd:
+    ubuntu: "xsettingsd"
+    arch: "xsettingsd"
   feh:
     ubuntu: "feh"
     arch: "feh"

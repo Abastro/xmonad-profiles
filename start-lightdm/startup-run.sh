@@ -20,5 +20,4 @@ xset s 3000 dpms 3600 3600 3600
 gnome-keyring-daemon --start --components=gpg,pkcs11,secrets,ssh
 
 # Workaround for dbus being displayed first
-dbus-update-activation-environment GDK_SCALE GDK_DPI_SCALE QT_AUTO_SCREEN_SCALE_FACTOR
-
+dbus-update-activation-environment QT_AUTO_SCREEN_SCALE_FACTOR
