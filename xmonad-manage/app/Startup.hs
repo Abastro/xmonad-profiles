@@ -35,7 +35,7 @@ getStartup startupDir = do
   Startup{..} <- readYAMLFile userError (startupDir </> "startup.yaml")
   pure Startup{startInstall = startupDir </> startInstall, startRun = startupDir </> startRun, ..}
 
-installStartup :: ManageEnv -> PkgDatabase -> Distro -> Startup -> IO ()
+installStartup :: ManageEnv -> PkgDatabase -> ManageID -> Startup -> IO ()
 installStartup mEnv pkgDb distro Startup{..} = do
   [reqs, _] <- traverse setToExecutable [startInstall, startRun]
   installX11 mEnv pkgDb distro
@@ -66,7 +66,7 @@ runStartup mEnv Startup{..} = do
       Right str -> pure str
     expanded ptext = mconcat <$> traverse expand ptext
 
-installX11 :: ManageEnv -> PkgDatabase -> Distro -> IO ()
+installX11 :: ManageEnv -> PkgDatabase -> ManageID -> IO ()
 installX11 mEnv@ManageEnv{..} pkgDb distro = do
   homeDir <- getHomeDirectory
   installPackages mEnv pkgDb distro [AsPackage (T.pack "xsettingsd")]

@@ -3,75 +3,97 @@
 derivatives:
   EndeavourOS: "arch"
   Ubuntu: "ubuntu" # Upper case problems
-installer:
-  ubuntu: "apt install"
-  arch: "pacman -Syu"
-# Known packages
+
+# Distro-specific package managers.
+distros:
+  ubuntu:
+    installer: "apt"
+    arg-install: "install"
+    need-root: true
+  arch:
+    installer: "pacman"
+    arg-install: "-Syu"
+    need-root: true
+
+# Common installers, invoked after package managers.
+commons:
+  - id: "haskell"
+    installer:
+      installer: "cabal"
+      arg-install: "install"
+      need-root: false
+
+# Known packages.
+# Missing "naming" field means its ID serves as names.
+# If a package is not available in certain platforms, then "naming" field must be specified.
+# It also needs to be specified if a package is available through common installers.
 packages:
-  # picom requires ubuntu 22.04+
+# Haskell executables
+  xmonad:
+    components:
+      executable:
+      - "xmonad"
+    naming:
+      haskell: "xmonad"
+  status-notifier-item:
+    components:
+      executable:
+      - "status-notifier-watcher"
+      - "status-notifier-item-static"
+      - "sni-cl-tool"
+    naming:
+      haskell: "status-notifier-item"
+# Compositors
   picom:
-    ubuntu: "picom"
-    arch: "picom"
 # Policy kits
   policykit-gnome:
-    ubuntu: "policykit-1-gnome"
-    arch: "polkit-gnome"
+    naming:
+      ubuntu: "policykit-1-gnome"
+      arch: "polkit-gnome"
   policykit-kde:
-    ubuntu: "polkit-kde-agent-1"
-    arch: "polkit-kde-agent"
+    naming:
+      ubuntu: "polkit-kde-agent-1"
+      arch: "polkit-kde-agent"
 # Lockers
   light-locker:
-    ubuntu: "light-locker"
-    arch: "light-locker"
   xss-lock:
-    ubuntu: "xss-lock"
-    arch: "xss-lock"
 # Development
   libxss:
-    ubuntu: "libxss-dev"
-    arch: "libxss"
+    naming:
+      ubuntu: "libxss-dev"
+      arch: "libxss"
   alsa-dev:
-    ubuntu: "libasound2-dev"
-    arch: "alsa-lib"
+    naming:
+      ubuntu: "libasound2-dev"
+      arch: "alsa-lib"
   gtk3-dev:
-    ubuntu: "libgtk-3-dev"
-    arch: "gtk3"
+    naming:
+      ubuntu: "libgtk-3-dev"
+      arch: "gtk3"
   libgirepository:
-    ubuntu: "libgirepository1.0-dev"
-    arch: "gobject-introspection"
+    naming:
+      ubuntu: "libgirepository1.0-dev"
+      arch: "gobject-introspection"
   libdbusmenu-gtk3:
-    ubuntu: "libdbusmenu-gtk3-dev"
-    arch: "libdbusmenu-gtk3"
+    naming:
+      ubuntu: "libdbusmenu-gtk3-dev"
+      arch: "libdbusmenu-gtk3"
 # UIs
   synapse:
-    ubuntu: "synapse"
-    arch: "synapse"
   gnome-screenshot:
-    ubuntu: "gnome-screenshot"
-    arch: "gnome-screenshot"
 # System Control
   xsettingsd:
-    ubuntu: "xsettingsd"
-    arch: "xsettingsd"
   feh:
-    ubuntu: "feh"
-    arch: "feh"
   light:
-    ubuntu: "light"
-    arch: "light"
   network-manager-applet:
-    ubuntu: "network-manager-gnome"
-    arch: "network-manager-applet"
+    naming:
+      ubuntu: "network-manager-gnome"
+      arch: "network-manager-applet"
   blueman:
-    ubuntu: "blueman"
-    arch: "blueman"
 # Tools
   parcellite:
-    ubuntu: "parcellite"
-    arch: "parcellite"
   suckless-tools:
-    ubuntu: "suckless-tools"
+    naming:
+      ubuntu: "suckless-tools"
 # Keyring
   gnome-keyring:
-    ubuntu: "gnome-keyring"
-    arch: "gnome-keyring"

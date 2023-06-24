@@ -89,7 +89,7 @@ withProfile ManageEnv{..} cfgDir withProf = handle @IOError onIOErr $ do
 -- | Path of the runner file.
 runnerLinkPath profID = "/" </> "usr" </> "share" </> "xsessions" </> idStr profID <.> "desktop"
 
-installProfile :: ManageEnv -> PkgDatabase -> Distro -> Profile -> Executable -> IO ()
+installProfile :: ManageEnv -> PkgDatabase -> ManageID -> Profile -> Executable -> IO ()
 installProfile mEnv@ManageEnv{logger} pkgDb distro profile@Profile{..} sudo = do
   -- Prepares directories
   traverse_ (createDirectoryIfMissing True) [dataDir, cacheDir, logDir]

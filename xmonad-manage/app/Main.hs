@@ -112,13 +112,8 @@ main = (`catch` handleError) $ do
       logger "Begin"
       distro <- findDistro mEnv
       withDatabase mEnv $ \pkgDb -> do
-        -- libxss is needed for xmonad, so this is hard-coded
-        installPackages mEnv pkgDb distro [AsPackage $ T.pack "libxss"]
-        findExecutable "xmonad" >>= \case
-          Just _ -> logger "xmonad found in PATH"
-          Nothing -> do
-            cabal <- getExecutable "cabal"
-            callExe cabal ["install", "xmonad"]
+        -- Install xmonad (libxss is a source dependency of xmonad)
+        installPackages mEnv pkgDb distro [AsPackage (T.pack "libxss"), AsPackage (T.pack "xmonad")]
         logger "Install startup"
         startup <- getStartup startupDir
         installStartup mEnv pkgDb distro startup
