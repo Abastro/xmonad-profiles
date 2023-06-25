@@ -111,12 +111,11 @@ main = (`catch` handleError) $ do
     Setup -> do
       logger "Begin"
       distro <- findDistro mEnv
+      -- XMonad's requirement, libxss is a source dependency of xmonad.
+      let xmonadReq = requireDeps [AsPackage (T.pack "libxss"), AsPackage (T.pack "xmonad")]
       withDatabase mEnv $ \pkgDb -> do
-        -- Install xmonad (libxss is a source dependency of xmonad)
-        installPackages mEnv pkgDb distro [AsPackage (T.pack "libxss"), AsPackage (T.pack "xmonad")]
-        logger "Install startup"
         startup <- getStartup startupDir
-        installStartup mEnv pkgDb distro startup
+        meetRequirements mEnv pkgDb distro (xmonadReq <> x11Reqs <> startupReqs startup)
       logger "End"
 
     -- Lists installed profiles

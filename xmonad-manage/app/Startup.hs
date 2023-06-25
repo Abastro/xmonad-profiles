@@ -35,12 +35,17 @@ getStartup startupDir = do
   Startup{..} <- readYAMLFile userError (startupDir </> "startup.yaml")
   pure Startup{startInstall = startupDir </> startInstall, startRun = startupDir </> startRun, ..}
 
-installStartup :: ManageEnv -> PkgDatabase -> ManageID -> Startup -> IO ()
-installStartup mEnv pkgDb distro Startup{..} = do
-  [reqs, _] <- traverse setToExecutable [startInstall, startRun]
-  installX11 mEnv pkgDb distro
-  installPackages mEnv pkgDb distro dependencies
-  callExe reqs []
+startupReqs :: Startup -> Requirement
+startupReqs Startup{..} =
+  MkRequirement
+    { customInstall
+    , requiredDeps = dependencies
+    }
+  where
+    customInstall ManageEnv{..} = do
+      logger "Custom install: Startup"
+      [reqs, _] <- traverse setToExecutable [startInstall, startRun]
+      callExe reqs []
 
 runStartup :: ManageEnv -> Startup -> IO ()
 runStartup mEnv Startup{..} = do
@@ -66,14 +71,19 @@ runStartup mEnv Startup{..} = do
       Right str -> pure str
     expanded ptext = mconcat <$> traverse expand ptext
 
-installX11 :: ManageEnv -> PkgDatabase -> ManageID -> IO ()
-installX11 mEnv@ManageEnv{..} pkgDb distro = do
-  homeDir <- getHomeDirectory
-  installPackages mEnv pkgDb distro [AsPackage (T.pack "xsettingsd")]
-  logger "Copying .Xresources and xsettings.conf..."
-  -- Copy X settings and resources
-  copyFile (envPath </> "database" </> ".Xresources") (homeDir </> ".Xresources")
-  copyFile (envPath </> "database" </> "xsettingsd.conf") (homeDir </> ".config" </> "xsettingsd" </> "xsettingsd.conf")
+x11Reqs :: Requirement
+x11Reqs =
+  MkRequirement
+    { customInstall
+    , requiredDeps = [AsPackage (T.pack "xsettingsd")]
+    }
+  where
+    customInstall ManageEnv{..} = do
+      homeDir <- getHomeDirectory
+      logger "Copying .Xresources and xsettings.conf..."
+      -- Copy X settings and resources
+      copyFile (envPath </> "database" </> ".Xresources") (homeDir </> ".Xresources")
+      copyFile (envPath </> "database" </> "xsettingsd.conf") (homeDir </> ".config" </> "xsettingsd" </> "xsettingsd.conf")
 
 startX11 :: ManageEnv -> IO ()
 startX11 ManageEnv{} = do

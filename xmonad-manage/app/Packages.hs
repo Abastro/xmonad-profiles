@@ -5,8 +5,10 @@ module Packages (
   ManageID (..),
   Package (..),
   PkgDatabase,
+  Requirement (..),
+  requireDeps,
   withDatabase,
-  installPackages,
+  meetRequirements,
   findDistro,
 ) where
 
@@ -20,9 +22,9 @@ import Data.Set qualified as S
 import Data.Text qualified as T
 import Data.YAML
 import Manages
+import System.Directory (findExecutable)
 import System.FilePath
 import System.Process
-import System.Directory (findExecutable)
 
 -- | Manager ID, could be either distribution or installation medium.
 newtype ManageID = ManageIDOf T.Text
@@ -50,7 +52,7 @@ instance FromYAML PkgDatabase where
       <$> (m .: T.pack "derivatives")
       <*> (m .: T.pack "distros")
       <*> (m .: T.pack "commons")
-      <*> (m .: T.pack "packages")
+      <*> (M.map (fromMaybe emptyInfo) <$> m .: T.pack "packages")
 
 data Manager = ManagerOf !ManageID !Installer
   deriving (Show)
@@ -80,6 +82,8 @@ data PkgInfo = MkPkgInfo
   , naming :: Maybe (M.Map ManageID T.Text)
   }
   deriving (Show)
+emptyInfo :: PkgInfo
+emptyInfo = MkPkgInfo Nothing Nothing
 
 -- | Components are currently only used for checking presence.
 data Components = WithComponents
@@ -111,6 +115,22 @@ data PkgsError
 
 instance Exception PkgsError
 
+-- MAYBE couple with actions for start as well?
+-- | Nicely packed requirements for a component.
+data Requirement = MkRequirement
+  { requiredDeps :: [Package]
+  , customInstall :: ManageEnv -> IO ()
+  }
+requireDeps :: [Package] -> Requirement
+requireDeps deps = MkRequirement deps mempty
+
+instance Semigroup Requirement where
+  (<>) :: Requirement -> Requirement -> Requirement
+  MkRequirement deps act <> MkRequirement deps' act' = MkRequirement (deps <> deps') (act <> act')
+instance Monoid Requirement where
+  mempty :: Requirement
+  mempty = MkRequirement mempty mempty
+
 findDistro :: ManageEnv -> IO ManageID
 findDistro ManageEnv{..} = do
   lsbRel <- getExecutable "lsb_release"
@@ -126,6 +146,13 @@ withDatabase ManageEnv{..} withDb = do
   pkgDatabase <- readYAMLFile DatabaseMalformed (envPath </> "database" </> "system-packages.yaml")
   withDb pkgDatabase
 
+meetRequirements :: ManageEnv -> PkgDatabase -> ManageID -> Requirement -> IO ()
+meetRequirements mEnv@ManageEnv{..} pkgDb distro MkRequirement{..} = do
+  logger "Installing dependencies.."
+  installPackages mEnv pkgDb distro requiredDeps
+  logger "Running custom installation process.."
+  customInstall mEnv
+
 -- TODO Force installation regardless of presence of a pacakge?
 installPackages :: ManageEnv -> PkgDatabase -> ManageID -> [Package] -> IO ()
 installPackages mEnv@ManageEnv{..} AsPkgDatabase{..} distro deps = do
@@ -136,7 +163,7 @@ installPackages mEnv@ManageEnv{..} AsPkgDatabase{..} distro deps = do
 
   -- Locate package info.
   let pkgInfos = M.restrictKeys packages depSet
-      missings = S.filter (`M.member` pkgInfos) depSet
+      missings = S.filter (`M.notMember` pkgInfos) depSet
   unless (S.null missings) $ do
     throwIO (UnknownPackages $ S.toList missings)
 
@@ -169,10 +196,11 @@ installPkgsWith ManageEnv{..} InstallerOf{..} pkgs = do
   (existing, needed) <- M.mapEither id <$> traverse (uncurry $ flip detectInstalled) pkgs
   let targets = M.elems needed
   logger "Already installed packages: %s" (show $ M.keys existing)
-  logger "Installing dependencies %s..." (show targets)
-  if needRoot
-    then callProcess "sudo" (map T.unpack $ instName : argInstall : targets)
-    else callProcess (T.unpack instName) (map T.unpack $ argInstall : targets)
+  unless (null targets) $ do
+    logger "Installing dependencies %s..." (show targets)
+    if needRoot
+      then callProcess "sudo" (map T.unpack $ instName : argInstall : targets)
+      else callProcess (T.unpack instName) (map T.unpack $ argInstall : targets)
 
 data Existing = Exists
 
