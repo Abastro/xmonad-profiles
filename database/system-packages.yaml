@@ -54,7 +54,11 @@ packages:
     naming:
       ubuntu: "polkit-kde-agent-1"
       arch: "polkit-kde-agent"
-# Lockers
+# Display Managers
+  lightdm-slick-greeter:
+    naming:
+      ubuntu: "slick-greeter"
+      arch: "lightdm-slick-greeter"
   light-locker:
   xss-lock:
 # Development
