@@ -17,12 +17,16 @@ import System.Exit
 import System.IO
 import Text.Printf
 
--- NOTE Fetches from separate configuration directory for each profile.
+-- * Fetches from separate configuration directory for each profile.
 
--- TODO Maybe do not install system packages, and instead check for existence of packages?
+-- ? do not install system packages, and instead check for existence of packages?
 -- TODO Stay up-to-date appropriately corresponding to GHC Updates - How?
 -- If this were statically compiled, it would not matter, but it will take more size.
 -- Need analyzing dependencies - e.g. PulpMonad relies a lot on Gnome environment.
+
+-- TODO Proper help flag
+-- TODO Install & Run modules
+-- TODO Consider how systemd services are run
 
 data Action
   = Update
