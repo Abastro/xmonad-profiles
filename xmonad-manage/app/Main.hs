@@ -32,9 +32,9 @@ import Text.Printf
 data Action
   = Update
   | ResetSave
-  | Setup
+  | Setup InstallCond
   | ListProf
-  | InstallProf FilePath
+  | InstallProf FilePath InstallCond
   | RemoveProf ID
   | BuildProf ID
   | RunProf ID
@@ -54,17 +54,17 @@ manageOpts =
           Opts.info (pure ResetSave) $
             Opts.progDesc "Resets xmonad-manage save for when it is corrupted."
       , Opts.command "setup" $
-          Opts.info (pure Setup) $
+          Opts.info (Setup <$> installCond) $
             Opts.progDesc "Sets up common components, including XMonad."
       , Opts.command "list" $
           Opts.info (pure ListProf) $
             Opts.progDesc "Lists installed profiles."
       , Opts.command "install" $
-          Opts.info (InstallProf <$> pathArg "<profile-path>") $
+          Opts.info (InstallProf <$> pathArg "<profile-path>" <*> installCond) $
             Opts.progDesc "Installs a profile."
       , Opts.command "remove" $
           Opts.info (RemoveProf <$> profIdArg) $
-            Opts.progDesc "Removes a profile. Does not remove the cache files in '.cabal/store'."
+            Opts.progDesc "Removes a profile. Does not remove the installed packages or cache files in '.cabal/store'."
       , Opts.command "build" $
           Opts.info (BuildProf <$> profIdArg) $
             Opts.progDesc "Builds a profile manually."
@@ -80,11 +80,17 @@ manageOpts =
     version = "xmonad-manage " <> VERSION_xmonad_manage
     pathArg name = Opts.strArgument $ Opts.metavar name <> Opts.action "directory"
     profIdArg = Opts.argument (Opts.str >>= makeIDM) $ Opts.metavar "<profile-id>"
+    installCond =
+      Opts.flag WhenAbsent AlwaysInstall
+        ( Opts.long "always-install"
+            <> Opts.short 'a'
+            <> Opts.help "Run installation regardless of whether it was installed or not."
+        )
 
 -- | The manager program. Current directory needs to be the profile main directory.
 main :: IO ()
 main = (`catch` handleError) $ do
-  -- Sets to line buffering
+  -- For consistent line buffering
   hSetBuffering stdout LineBuffering
 
   cmdLine <- unwords <$> getArgs
@@ -113,14 +119,14 @@ main = (`catch` handleError) $ do
       logger "Save reset"
 
     -- Main installation
-    Setup -> do
+    Setup installCond -> do
       logger "Begin"
       distro <- findDistro mEnv
       -- XMonad's requirement, libxss is a source dependency of xmonad.
       let xmonadReq = requireDeps [AsPackage (T.pack "libxss"), AsPackage (T.pack "xmonad")]
       withDatabase mEnv $ \pkgDb -> do
         startup <- getStartup startupDir
-        meetRequirements mEnv pkgDb distro (xmonadReq <> x11Reqs <> startupReqs startup)
+        meetRequirements mEnv pkgDb distro installCond (xmonadReq <> x11Reqs <> startupReqs startup)
       logger "End"
 
     -- Lists installed profiles
@@ -134,12 +140,12 @@ main = (`catch` handleError) $ do
           printf "    %s\n" profileDetails
 
     -- Profile-specific installation
-    InstallProf rawPath -> do
+    InstallProf rawPath installCond -> do
       cfgPath <- canonicalizePath rawPath
       logger "Begin"
       distro <- findDistro mEnv
       let onProfile prof@Profile{profID} = do
-            withDatabase mEnv $ \pkgDb -> getExecutable "sudo" >>= installProfile mEnv pkgDb distro prof
+            withDatabase mEnv $ \pkgDb -> getExecutable "sudo" >>= installProfile mEnv pkgDb distro installCond prof
             let addProfile = M.insert profID cfgPath
             varMS $~ \saved@ManageSaved{profiles} -> saved{profiles = addProfile profiles}
       withProfile mEnv cfgPath onProfile

@@ -6,6 +6,7 @@ module Packages (
   Package (..),
   PkgDatabase,
   Requirement (..),
+  InstallCond (..),
   requireDeps,
   withDatabase,
   meetRequirements,
@@ -115,12 +116,16 @@ data PkgsError
 
 instance Exception PkgsError
 
+data InstallCond = WhenAbsent | AlwaysInstall
+
 -- MAYBE couple with actions for start as well?
+
 -- | Nicely packed requirements for a component.
 data Requirement = MkRequirement
   { requiredDeps :: [Package]
   , customInstall :: ManageEnv -> IO ()
   }
+
 requireDeps :: [Package] -> Requirement
 requireDeps deps = MkRequirement deps mempty
 
@@ -146,16 +151,16 @@ withDatabase ManageEnv{..} withDb = do
   pkgDatabase <- readYAMLFile DatabaseMalformed (envPath </> "database" </> "system-packages.yaml")
   withDb pkgDatabase
 
-meetRequirements :: ManageEnv -> PkgDatabase -> ManageID -> Requirement -> IO ()
-meetRequirements mEnv@ManageEnv{..} pkgDb distro MkRequirement{..} = do
+meetRequirements :: ManageEnv -> PkgDatabase -> ManageID -> InstallCond -> Requirement -> IO ()
+meetRequirements mEnv@ManageEnv{..} pkgDb distro cond MkRequirement{..} = do
   logger "Installing dependencies.."
-  installPackages mEnv pkgDb distro requiredDeps
+  installPackages mEnv pkgDb distro cond requiredDeps
   logger "Running custom installation process.."
   customInstall mEnv
 
 -- TODO Force installation regardless of presence of a pacakge?
-installPackages :: ManageEnv -> PkgDatabase -> ManageID -> [Package] -> IO ()
-installPackages mEnv@ManageEnv{..} AsPkgDatabase{..} distro deps = do
+installPackages :: ManageEnv -> PkgDatabase -> ManageID -> InstallCond -> [Package] -> IO ()
+installPackages mEnv@ManageEnv{..} AsPkgDatabase{..} distro cond deps = do
   distroInst <- case distros M.!? originDistro of
     Just inst -> pure inst
     Nothing -> throwIO (UnknownDistro originDistro)
@@ -174,7 +179,7 @@ installPackages mEnv@ManageEnv{..} AsPkgDatabase{..} distro deps = do
     throwIO (NotAvailableInDistro distro $ M.keys missingInstalls)
 
   -- Then, installs the packages.
-  let installFor (ManagerOf _ installer) = installPkgsWith mEnv installer
+  let installFor (ManagerOf _ installer) = installPkgsWith mEnv installer cond
   zipWithM_ installFor managers installTargets -- MAYBE This is fragile
   where
     depSet = S.fromList deps
@@ -190,17 +195,24 @@ packageNameOn manageID (AsPackage pkgID) pkgInfo = case pkgInfo.naming of
   Just names -> maybe (Left pkgInfo) Right $ names M.!? manageID
   Nothing -> Right pkgID
 
-installPkgsWith :: ManageEnv -> Installer -> M.Map Package (PkgInfo, T.Text) -> IO ()
-installPkgsWith ManageEnv{..} InstallerOf{..} pkgs = do
+installPkgsWith :: ManageEnv -> Installer -> InstallCond -> M.Map Package (PkgInfo, T.Text) -> IO ()
+installPkgsWith ManageEnv{..} InstallerOf{..} cond pkgs = do
   logger "Installing with: %s %s" (T.unpack instName) (T.unpack argInstall)
-  (existing, needed) <- M.mapEither id <$> traverse (uncurry $ flip detectInstalled) pkgs
-  let targets = M.elems needed
-  logger "Already installed packages: %s" (show $ M.keys existing)
-  unless (null targets) $ do
-    logger "Installing dependencies %s..." (show targets)
-    if needRoot
-      then callProcess "sudo" (map T.unpack $ instName : argInstall : targets)
-      else callProcess (T.unpack instName) (map T.unpack $ argInstall : targets)
+  case cond of
+    WhenAbsent -> do
+      (existing, needed) <- M.mapEither id <$> traverse (uncurry $ flip detectInstalled) pkgs
+      let targets = M.elems needed
+      logger "Already installed packages: %s" (show $ M.keys existing)
+      installPkgs targets
+    AlwaysInstall -> do
+      logger "NOTE: always-install option specified, installation includes preexisting packages."
+      installPkgs (snd <$> M.elems pkgs)
+  where
+    installPkgs targets = unless (null targets) $ do
+      logger "Installing dependencies %s..." (show targets)
+      if needRoot
+        then callProcess "sudo" (map T.unpack $ instName : argInstall : targets)
+        else callProcess (T.unpack instName) (map T.unpack $ argInstall : targets)
 
 data Existing = Exists
 

@@ -90,8 +90,8 @@ withProfile ManageEnv{..} cfgDir withProf = handle @IOError onIOErr $ do
 runnerLinkPath profID = "/" </> "usr" </> "share" </> "xsessions" </> idStr profID <.> "desktop"
 
 -- TODO Possibly refactor this
-installProfile :: ManageEnv -> PkgDatabase -> ManageID -> Profile -> Executable -> IO ()
-installProfile mEnv@ManageEnv{logger} pkgDb distro profile@Profile{..} sudo = do
+installProfile :: ManageEnv -> PkgDatabase -> ManageID -> InstallCond -> Profile -> Executable -> IO ()
+installProfile mEnv@ManageEnv{logger} pkgDb distro cond profile@Profile{..} sudo = do
   -- Prepares directories
   traverse_ (createDirectoryIfMissing True) [dataDir, cacheDir, logDir]
 
@@ -103,7 +103,7 @@ installProfile mEnv@ManageEnv{logger} pkgDb distro profile@Profile{..} sudo = do
   callExe sudo ["cp", "-T", runnerPath, runnerLinkPath profID]
 
   logger "Installing dependencies"
-  meetRequirements  mEnv pkgDb distro (requireDeps profDeps)
+  meetRequirements mEnv pkgDb distro cond (requireDeps profDeps)
 
   logger "Install using %s" (show profInstall)
   traverse_ (`callExe` []) profInstall
