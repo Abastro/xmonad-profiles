@@ -20,7 +20,7 @@ import Text.Printf
 -- * Fetches from separate configuration directory for each profile.
 
 -- ? do not install system packages, and instead check for existence of packages?
--- TODO Stay up-to-date appropriately corresponding to GHC Updates - How?
+-- TODO Stay up-to-date appropriately corresponding to GHC Updates (How?)
 -- If this were statically compiled, it would not matter, but it will take more size.
 -- Need analyzing dependencies - e.g. PulpMonad relies a lot on Gnome environment.
 
@@ -42,10 +42,9 @@ data Action
 optPrefs :: Opts.ParserPrefs
 optPrefs = Opts.prefs Opts.showHelpOnEmpty
 
--- NOTE Completer doesn't work, maybe remove it?
 manageOpts :: Opts.ParserInfo Action
 manageOpts =
-  (`Opts.info` Opts.fullDesc) . Opts.hsubparser $
+  (`Opts.info` Opts.fullDesc) . (Opts.helper <*>) . Opts.hsubparser $
     mconcat
       [ Opts.command "update" $
           Opts.info (pure Update) $
