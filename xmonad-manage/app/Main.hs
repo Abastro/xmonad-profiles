@@ -22,7 +22,7 @@ import Text.Printf
 -- * Fetches from separate configuration directory for each profile.
 
 -- ? do not install system packages, and instead check for existence of packages?
--- TODO Stay up-to-date appropriately corresponding to GHC Updates (How?)
+-- ? Stay up-to-date appropriately corresponding to GHC Updates - How?
 -- If this were statically compiled, it would not matter, but it will take more size.
 -- Need analyzing dependencies - e.g. PulpMonad relies a lot on Gnome environment.
 
@@ -81,7 +81,9 @@ manageOpts =
     pathArg name = Opts.strArgument $ Opts.metavar name <> Opts.action "directory"
     profIdArg = Opts.argument (Opts.str >>= makeIDM) $ Opts.metavar "<profile-id>"
     installCond =
-      Opts.flag WhenAbsent AlwaysInstall
+      Opts.flag
+        WhenAbsent
+        AlwaysInstall
         ( Opts.long "always-install"
             <> Opts.short 'a'
             <> Opts.help "Run installation regardless of whether it was installed or not."
@@ -144,11 +146,11 @@ main = (`catch` handleError) $ do
       cfgPath <- canonicalizePath rawPath
       logger "Begin"
       distro <- findDistro mEnv
-      let onProfile prof@Profile{profID} = do
-            withDatabase mEnv $ \pkgDb -> getExecutable "sudo" >>= installProfile mEnv pkgDb distro installCond prof
-            let addProfile = M.insert profID cfgPath
-            varMS $~ \saved@ManageSaved{profiles} -> saved{profiles = addProfile profiles}
-      withProfile mEnv cfgPath onProfile
+      withDatabase mEnv $ \pkgDb -> do
+        withProfile mEnv cfgPath $ \profile@Profile{profID} -> do
+          meetRequirements mEnv pkgDb distro installCond (profileReqs profile)
+          let addProfile = M.insert profID cfgPath
+          varMS $~ \saved@ManageSaved{profiles} -> saved{profiles = addProfile profiles}
       logger "End"
 
     -- Remove a profile

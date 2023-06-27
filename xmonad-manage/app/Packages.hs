@@ -158,7 +158,6 @@ meetRequirements mEnv@ManageEnv{..} pkgDb distro cond MkRequirement{..} = do
   logger "Running custom installation process.."
   customInstall mEnv
 
--- TODO Force installation regardless of presence of a pacakge?
 installPackages :: ManageEnv -> PkgDatabase -> ManageID -> InstallCond -> [Package] -> IO ()
 installPackages mEnv@ManageEnv{..} AsPkgDatabase{..} distro cond deps = do
   distroInst <- case distros M.!? originDistro of
@@ -208,7 +207,8 @@ installPkgsWith ManageEnv{..} InstallerOf{..} cond pkgs = do
       logger "NOTE: always-install option specified, installation includes preexisting packages."
       installPkgs (snd <$> M.elems pkgs)
   where
-    installPkgs targets = unless (null targets) $ do
+    installPkgs [] = logger "All dependencies are installed."
+    installPkgs targets = do
       logger "Installing dependencies %s..." (show targets)
       if needRoot
         then callProcess "sudo" (map T.unpack $ instName : argInstall : targets)
