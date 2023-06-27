@@ -157,8 +157,8 @@ main = (`catch` handleError) $ do
     RemoveProf profID -> do
       cfgPath <- getProfile profID
       logger "Begin"
-      withProfile mEnv cfgPath $ \prof@Profile{profID} -> do
-        getExecutable "sudo" >>= removeProfile mEnv prof
+      withProfile mEnv cfgPath $ \profile@Profile{profID} -> do
+        stopRequirements mEnv (profileReqs profile)
         let rmProfile = M.delete profID
         varMS $~ \saved@ManageSaved{profiles} -> saved{profiles = rmProfile profiles}
       logger "End"

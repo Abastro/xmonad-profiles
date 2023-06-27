@@ -10,6 +10,7 @@ module Packages (
   requireDeps,
   withDatabase,
   meetRequirements,
+  stopRequirements,
   findDistro,
 ) where
 
@@ -124,17 +125,18 @@ data InstallCond = WhenAbsent | AlwaysInstall
 data Requirement = MkRequirement
   { requiredDeps :: [Package]
   , customInstall :: ManageEnv -> IO ()
+  , customRemove :: ManageEnv -> IO ()
   }
 
 requireDeps :: [Package] -> Requirement
-requireDeps deps = MkRequirement deps mempty
+requireDeps deps = MkRequirement deps mempty mempty
 
 instance Semigroup Requirement where
   (<>) :: Requirement -> Requirement -> Requirement
-  MkRequirement deps act <> MkRequirement deps' act' = MkRequirement (deps <> deps') (act <> act')
+  MkRequirement deps inst rm <> MkRequirement deps' inst' rm' = MkRequirement (deps <> deps') (inst <> inst') (rm <> rm')
 instance Monoid Requirement where
   mempty :: Requirement
-  mempty = MkRequirement mempty mempty
+  mempty = MkRequirement mempty mempty mempty
 
 findDistro :: ManageEnv -> IO ManageID
 findDistro ManageEnv{..} = do
@@ -157,6 +159,12 @@ meetRequirements mEnv@ManageEnv{..} pkgDb distro cond MkRequirement{..} = do
   installPackages mEnv pkgDb distro cond requiredDeps
   logger "Running custom installation process.."
   customInstall mEnv
+
+stopRequirements :: ManageEnv -> Requirement -> IO ()
+stopRequirements mEnv@ManageEnv{..} MkRequirement{..} = do
+  logger "Removing dependencies is not yet implemented."
+  logger "Running custom removal process..."
+  customRemove mEnv
 
 installPackages :: ManageEnv -> PkgDatabase -> ManageID -> InstallCond -> [Package] -> IO ()
 installPackages mEnv@ManageEnv{..} AsPkgDatabase{..} distro cond deps = do

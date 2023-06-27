@@ -39,11 +39,12 @@ startupReqs :: Startup -> Requirement
 startupReqs Startup{..} =
   MkRequirement
     { customInstall
+    , customRemove = mempty
     , requiredDeps = dependencies
     }
   where
     customInstall ManageEnv{..} = do
-      logger "Custom install: Startup"
+      logger "Custom installation for startup..."
       [reqs, _] <- traverse setToExecutable [startInstall, startRun]
       callExe reqs []
 
@@ -75,6 +76,7 @@ x11Reqs :: Requirement
 x11Reqs =
   MkRequirement
     { customInstall
+    , customRemove = mempty
     , requiredDeps = [AsPackage (T.pack "xsettingsd")]
     }
   where

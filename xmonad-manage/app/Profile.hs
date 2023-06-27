@@ -4,7 +4,6 @@ module Profile (
   ProfileError (..),
   withProfile,
   profileReqs,
-  removeProfile,
   buildProfile,
   runProfile,
 ) where
@@ -93,6 +92,7 @@ profileReqs :: Profile -> Requirement
 profileReqs profile@Profile{..} =
   MkRequirement
     { customInstall
+    , customRemove
     , requiredDeps = profDeps
     }
   where
@@ -135,13 +135,12 @@ profileReqs profile@Profile{..} =
             (show $ logDir </> "start.err")
         ]
 
-removeProfile :: ManageEnv -> Profile -> Executable -> IO ()
-removeProfile ManageEnv{logger} Profile{..} sudo = do
-  -- NOTE: cfgDir is not removed, as it is the source of the entire installation
-  logger "Removing profile-specific directories"
-  traverse_ removePathForcibly [dataDir, cacheDir, logDir]
-  logger "Removing xsession runner, asking sudo"
-  callExe sudo ["rm", "-f", runnerLinkPath profID]
+    customRemove ManageEnv{logger} = do
+      -- * cfgDir is not removed, as it is the source of the entire installation
+      logger "Removing profile-specific directories..."
+      traverse_ removePathForcibly [dataDir, cacheDir, logDir]
+      logger "Removing xsession runner..."
+      callProcess "sudo" ["rm", "-f", runnerLinkPath profID]
 
 buildProfile :: ManageEnv -> Profile -> IO ()
 buildProfile ManageEnv{logger} Profile{cfgDir, profBuild} = do
