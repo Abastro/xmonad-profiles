@@ -1,3 +1,5 @@
+{-# LANGUAGE CPP #-}
+
 module Main (main) where
 
 import Common
@@ -24,7 +26,6 @@ import Text.Printf
 -- If this were statically compiled, it would not matter, but it will take more size.
 -- Need analyzing dependencies - e.g. PulpMonad relies a lot on Gnome environment.
 
--- TODO Proper help flag
 -- TODO Install & Run modules
 -- TODO Consider how systemd services are run
 
@@ -44,7 +45,7 @@ optPrefs = Opts.prefs Opts.showHelpOnEmpty
 
 manageOpts :: Opts.ParserInfo Action
 manageOpts =
-  (`Opts.info` Opts.fullDesc) . (Opts.helper <*>) . Opts.hsubparser $
+  (`Opts.info` Opts.fullDesc) . (Opts.simpleVersioner version <*>) . (Opts.helper <*>) . Opts.hsubparser $
     mconcat
       [ Opts.command "update" $
           Opts.info (pure Update) $
@@ -76,6 +77,7 @@ manageOpts =
             Opts.progDesc "Change startup setups."
       ]
   where
+    version = "xmonad-manage " <> VERSION_xmonad_manage
     pathArg name = Opts.strArgument $ Opts.metavar name <> Opts.action "directory"
     profIdArg = Opts.argument (Opts.str >>= makeIDM) $ Opts.metavar "<profile-id>"
 
