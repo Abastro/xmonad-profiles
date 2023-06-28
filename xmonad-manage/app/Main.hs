@@ -18,6 +18,7 @@ import System.Environment
 import System.Exit
 import System.IO
 import Text.Printf
+import System.Process
 
 -- * Fetches from separate configuration directory for each profile.
 
@@ -26,7 +27,7 @@ import Text.Printf
 -- If this were statically compiled, it would not matter, but it will take more size.
 -- Need analyzing dependencies - e.g. PulpMonad relies a lot on Gnome environment.
 
--- TODO Install & Run modules
+-- ? Install & Run modules? Think about this.
 -- TODO Consider how systemd services are run
 
 data Action
@@ -108,8 +109,7 @@ main = (`catch` handleError) $ do
     Update -> do
       logger "Updating..."
       _ <- withCurrentDirectory envPath $ do
-        cabal <- getExecutable "cabal"
-        callExe cabal ["install", "exe:xmonad-manage", "--overwrite-policy=always"]
+        callProcess "cabal" ["install", "exe:xmonad-manage", "--overwrite-policy=always"]
         get varMS -- In case it is updated, need to reset!
       logger "Updated"
 
@@ -127,8 +127,8 @@ main = (`catch` handleError) $ do
       -- XMonad's requirement, libxss is a source dependency of xmonad.
       let xmonadReq = requireDeps [AsPackage (T.pack "libxss"), AsPackage (T.pack "xmonad")]
       withDatabase mEnv $ \pkgDb -> do
-        startup <- getStartup startupDir
-        meetRequirements mEnv pkgDb distro installCond (xmonadReq <> x11Reqs <> startupReqs startup)
+        withStartup startupDir $ \startup -> do
+          meetRequirements mEnv pkgDb distro installCond (xmonadReq <> x11Reqs <> startupReqs startup)
       logger "End"
 
     -- Lists installed profiles
@@ -176,7 +176,7 @@ main = (`catch` handleError) $ do
       cfgPath <- getProfile profID
       withCurrentDirectory home $ do
         logger "Setup"
-        getStartup startupDir >>= runStartup mEnv
+        withStartup startupDir (runStartup mEnv)
         logger "Booting xmonad"
         withProfile mEnv cfgPath (runProfile mEnv)
         logger "Exit"
@@ -185,7 +185,7 @@ main = (`catch` handleError) $ do
     ChangeStart rawPath -> do
       startupDir <- canonicalizePath rawPath
       logger "Begin"
-      _ <- getStartup startupDir -- This checks if startup directory is valid
+      withStartup startupDir $ \_ -> pure () -- This checks if startup directory is valid
       varMS $~ \saved -> saved{startupDir}
       logger "Startup manage directory set to %s" startupDir
       logger "End"

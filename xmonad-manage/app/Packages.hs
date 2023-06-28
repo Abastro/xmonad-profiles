@@ -119,8 +119,6 @@ instance Exception PkgsError
 
 data InstallCond = WhenAbsent | AlwaysInstall
 
--- MAYBE couple with actions for start as well?
-
 -- | Nicely packed requirements for a component.
 data Requirement = MkRequirement
   { requiredDeps :: [Package]
@@ -140,8 +138,7 @@ instance Monoid Requirement where
 
 findDistro :: ManageEnv -> IO ManageID
 findDistro ManageEnv{..} = do
-  lsbRel <- getExecutable "lsb_release"
-  got <- readExe lsbRel ["-i"]
+  got <- readProcess "lsb_release" ["-i"] []
   case stripPrefix "Distributor ID:" got of
     Nothing -> do
       logger "lsb_release failed, gave %s" got

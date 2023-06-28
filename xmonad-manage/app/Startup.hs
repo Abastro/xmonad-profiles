@@ -1,4 +1,10 @@
-module Startup where
+module Startup (
+  Startup (..),
+  withStartup,
+  startupReqs,
+  runStartup,
+  x11Reqs,
+) where
 
 import Common
 import Data.Foldable
@@ -29,11 +35,10 @@ instance FromYAML Startup where
       <*> (m .: T.pack "environment")
       <*> (m .: T.pack "dependencies")
 
--- | Gets startup from path
-getStartup :: FilePath -> IO Startup
-getStartup startupDir = do
+withStartup :: FilePath -> (Startup -> IO a) -> IO a
+withStartup startupDir withStart = do
   Startup{..} <- readYAMLFile userError (startupDir </> "startup.yaml")
-  pure Startup{startInstall = startupDir </> startInstall, startRun = startupDir </> startRun, ..}
+  withStart Startup{startInstall = startupDir </> startInstall, startRun = startupDir </> startRun, ..}
 
 startupReqs :: Startup -> Requirement
 startupReqs Startup{..} =
@@ -45,8 +50,8 @@ startupReqs Startup{..} =
   where
     customInstall ManageEnv{..} = do
       logger "Custom installation for startup..."
-      [reqs, _] <- traverse setToExecutable [startInstall, startRun]
-      callExe reqs []
+      traverse_ setToExecutable [startInstall, startRun]
+      callProcess startInstall []
 
 runStartup :: ManageEnv -> Startup -> IO ()
 runStartup mEnv Startup{..} = do

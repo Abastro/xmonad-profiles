@@ -54,8 +54,8 @@ instance FromYAML ProfileCfg where
 data Profile = Profile
   { profID :: !ID
   , profProps :: !ProfileProps
-  , profInstall :: !(Maybe Executable)
-  , profBuild, profRun :: !Executable
+  , profInstall :: !(Maybe FilePath)
+  , profBuild, profRun :: !FilePath
   , cfgDir, dataDir, cacheDir, logDir :: !FilePath
   , profDeps :: [Package]
   }
@@ -72,8 +72,9 @@ withProfile :: ManageEnv -> FilePath -> (Profile -> IO a) -> IO a
 withProfile ManageEnv{..} cfgDir withProf = handle @IOError onIOErr $ do
   ProfileCfg{..} <- readYAMLFile ProfileWrongFormat (cfgDir </> "profile.yaml")
   let [dataDir, cacheDir, logDir] = locFor profileID <$> ["data", "cache", "logs"]
-  profInstall <- traverse setToExecutable $ (cfgDir </>) <$> installScript
-  [profBuild, profRun] <- traverse setToExecutable $ (cfgDir </>) <$> [buildScript, runScript]
+  let (profInstall, profBuild, profRun) = (cfgFor <$> installScript, cfgFor buildScript, cfgFor runScript)
+  traverse_ setToExecutable profInstall
+  traverse_ setToExecutable [profBuild, profRun]
   do
     setEnv "ENV_ARCH" arch >> setEnv "ENV_OS" os
     setEnv "XMONAD_DATA_DIR" dataDir
@@ -84,6 +85,7 @@ withProfile ManageEnv{..} cfgDir withProf = handle @IOError onIOErr $ do
   where
     onIOErr = throwIO . ProfileIOError cfgDir
     locFor ident str = envPath </> str </> idStr ident
+    cfgFor path = cfgDir </> path
 
 -- | Path of the runner file.
 runnerLinkPath profID = "/" </> "usr" </> "share" </> "xsessions" </> idStr profID <.> "desktop"
@@ -107,7 +109,7 @@ profileReqs profile@Profile{..} =
 
       for_ profInstall $ \install -> do
         logger "Further installation using %s" (show install)
-        callExe install []
+        callProcess install []
 
       logger "Building the profile..."
       buildProfile mEnv profile
@@ -145,9 +147,9 @@ profileReqs profile@Profile{..} =
 buildProfile :: ManageEnv -> Profile -> IO ()
 buildProfile ManageEnv{logger} Profile{cfgDir, profBuild} = do
   logger "Build using %s" (show profBuild)
-  withCurrentDirectory cfgDir $ callExe profBuild []
+  withCurrentDirectory cfgDir $ callProcess profBuild []
 
 runProfile :: ManageEnv -> Profile -> IO ()
 runProfile ManageEnv{logger} Profile{profRun} = do
   logger "Run using %s" (show profRun)
-  callExe profRun []
+  callProcess profRun []
