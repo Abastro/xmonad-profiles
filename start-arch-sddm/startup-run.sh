@@ -4,9 +4,6 @@ echo "Startup for SDDM..."
 # picom does transparency
 picom -bcCGf -D 4 -I 0.02 -O 0.02 -e 0.8
 
-# ibus-daemon provides ibus input handling
-ibus-daemon -drx &
-
 # SDDM locker?
 
 # TODO: Make this somehow a separate settings

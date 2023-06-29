@@ -4,9 +4,6 @@ echo "Startup for LightDM..."
 # picom does transparency
 picom -bcCGf -D 4 -I 0.02 -O 0.02 -e 0.8
 
-# ibus-daemon provides ibus input handling
-ibus-daemon -drx &
-
 # locker dedicated for lightdm
 light-locker &
 
