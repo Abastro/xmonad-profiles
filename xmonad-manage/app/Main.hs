@@ -22,13 +22,14 @@ import System.Process
 
 -- * Fetches from separate configuration directory for each profile.
 
--- ? do not install system packages, and instead check for existence of packages?
+-- ? Install & Run in terms of modules? Think about this.
+-- TODO Consider how systemd services are run
+-- ? Long-term: Add proxy for package removal.
+
+-- ? Consider: do not install system packages, and instead check for existence of packages?
 -- ? Stay up-to-date appropriately corresponding to GHC Updates - How?
 -- If this were statically compiled, it would not matter, but it will take more size.
--- Need analyzing dependencies - e.g. PulpMonad relies a lot on Gnome environment.
-
--- ? Install & Run modules? Think about this.
--- TODO Consider how systemd services are run
+-- ? Need analyzing dependencies - e.g. PulpMonad relies a lot on Gnome environment.
 
 data Action
   = Update

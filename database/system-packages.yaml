@@ -85,6 +85,7 @@ packages:
 # UIs
   synapse:
   gnome-screenshot:
+  nemo:
 # System Control
   xsettingsd:
   feh:
