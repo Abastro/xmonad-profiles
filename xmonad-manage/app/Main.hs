@@ -23,6 +23,7 @@ import System.Process
 -- * Fetches from separate configuration directory for each profile.
 
 -- ? Install & Run in terms of modules? Think about this.
+-- TODO Modularize
 -- TODO Consider how systemd services are run
 -- ? Long-term: Add proxy for package removal.
 

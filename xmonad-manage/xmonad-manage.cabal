@@ -28,7 +28,7 @@ executable xmonad-manage
     , filepath
     , directory
     , containers ==0.6.*
-    , mtl ==2.2.*
+    , mtl >=2.2 && <2.4
     , bytestring ==0.11.*
     , text ==2.0.*
     , process ^>= 1.6.14
