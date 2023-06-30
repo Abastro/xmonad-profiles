@@ -1,0 +1,6 @@
+dependencies:
+  - lightdm-slick-greeter
+  - light-locker
+install: "./install.sh"
+run: "./run.sh"
+environment:

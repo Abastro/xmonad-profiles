@@ -31,10 +31,12 @@ setToExecutable path = do
   perm <- getPermissions path
   setPermissions path (setOwnerExecutable True perm)
 
--- | Data variable stored in XDG_DATA_DIR
-dataVar :: (Serialize a) => String -> String -> IO a -> StateVar a
-dataVar appName loc mkDef = makeStateVar load save
+-- | Data variable stored in XDG_DATA_DIR, with an action to reset it to default.
+dataVar :: (Serialize a) => String -> String -> IO a -> (StateVar a, IO ())
+dataVar appName loc mkDef = (var, restore)
   where
+    var = makeStateVar load save
+    restore = mkDef >>= (var $=)
     load = do
       msave <- datPath
       let readAsA = withFile msave ReadMode (evaluate <=< fmap decodeLazy . B.hGetContents)

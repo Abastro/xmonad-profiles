@@ -7,18 +7,18 @@ import Control.Exception
 import Data.Foldable
 import Data.Map.Strict qualified as M
 import Data.StateVar
-import Data.Text qualified as T
 import Manages
+import Modules
 import Options.Applicative qualified as Opts
 import Packages
 import Profile
-import Startup
 import System.Directory
 import System.Environment
 import System.Exit
 import System.IO
-import Text.Printf
 import System.Process
+import Text.Printf
+import qualified Data.Text as T
 
 -- * Fetches from separate configuration directory for each profile.
 
@@ -41,7 +41,6 @@ data Action
   | RemoveProf ID
   | BuildProf ID
   | RunProf ID
-  | ChangeStart FilePath
 
 optPrefs :: Opts.ParserPrefs
 optPrefs = Opts.prefs Opts.showHelpOnEmpty
@@ -74,10 +73,6 @@ manageOpts =
       , Opts.command "run" $
           Opts.info (RunProf <$> profIdArg) $
             Opts.progDesc "Runs a profile."
-      , -- Startup is manually switched for now.
-        Opts.command "startup" $
-          Opts.info (ChangeStart <$> pathArg "<startup-path>") $
-            Opts.progDesc "Change startup setups."
       ]
   where
     version = "xmonad-manage " <> VERSION_xmonad_manage
@@ -99,12 +94,13 @@ main = (`catch` handleError) $ do
   hSetBuffering stdout LineBuffering
 
   cmdLine <- unwords <$> getArgs
-  saved <- get varMS
+  home <- getHomeDirectory
+  ManageSaved{managePath = envPath, profiles} <- get varMS
   let logger str = printf (printf "[%s] %s\n" cmdLine str)
-      ManageSaved{managePath = envPath, profiles, startupDir} = saved
       mEnv = ManageEnv{envPath, logger}
       getProfile profID =
         maybe (throwIO $ ProfileNotFound profID) pure $ profiles M.!? profID
+      (varModS, restoreModS) = mkVarModS mEnv
 
   Opts.customExecParser optPrefs manageOpts >>= \case
     -- Updates xmonad-manage
@@ -112,25 +108,41 @@ main = (`catch` handleError) $ do
       logger "Updating..."
       _ <- withCurrentDirectory envPath $ do
         callProcess "cabal" ["install", "exe:xmonad-manage", "--overwrite-policy=always"]
-        get varMS -- In case it is updated, need to reset!
-      logger "Updated"
+        -- In case it is updated, need to reset!
+        get varMS
+        get varModS
+      logger "Updated."
 
     -- Resets the save if corrupted
     ResetSave -> do
       logger "*** Resetting save, data could be lost! ***"
-      newMS <- mkMS
-      varMS $= newMS
-      logger "Save reset"
+      restoreMS
+      restoreModS
+      logger "Save reset."
 
     -- Main installation
     Setup installCond -> do
       logger "Begin"
+
+      -- TODO Need better logic
+      ModuleSaved modules <- get varModS
+      logger "Current modules are: %s" (show modules)
+      logger "Press enter to proceed with current modules,"
+      logger "or enter comma-separated module list to change active modules."
+      modS <- getLine >>= \case
+        [] -> do
+          logger "Proceeding..."
+          pure (ModuleSaved modules)
+        list -> do
+          let modules = map T.unpack $ T.splitOn (T.pack ",") $ T.pack list
+          varModS $= ModuleSaved modules
+          logger "Modules set to %s." (show modules)
+          get varModS
+
+      MkModule{requirement} <- combinedModule home modS
       distro <- findDistro mEnv
-      -- XMonad's requirement, libxss is a source dependency of xmonad.
-      let xmonadReq = requireDeps [AsPackage (T.pack "libxss"), AsPackage (T.pack "xmonad")]
       withDatabase mEnv $ \pkgDb -> do
-        withStartup startupDir $ \startup -> do
-          meetRequirements mEnv pkgDb distro installCond (xmonadReq <> x11Reqs <> startupReqs startup)
+        meetRequirements mEnv pkgDb distro installCond requirement
       logger "End"
 
     -- Lists installed profiles
@@ -174,23 +186,14 @@ main = (`catch` handleError) $ do
 
     -- Automatic profile run
     RunProf profID -> do
-      home <- getHomeDirectory
       cfgPath <- getProfile profID
       withCurrentDirectory home $ do
         logger "Setup"
-        withStartup startupDir (runStartup mEnv)
-        logger "Booting xmonad"
+        MkModule{onStartup} <- combinedModule home =<< get varModS
+        onStartup mEnv
+        logger "Booting xmonad..."
         withProfile mEnv cfgPath (runProfile mEnv)
         logger "Exit"
-
-    -- Change startup
-    ChangeStart rawPath -> do
-      startupDir <- canonicalizePath rawPath
-      logger "Begin"
-      withStartup startupDir $ \_ -> pure () -- This checks if startup directory is valid
-      varMS $~ \saved -> saved{startupDir}
-      logger "Startup manage directory set to %s" startupDir
-      logger "End"
   where
     -- MAYBE Do these need to be here?
     handleError = \case

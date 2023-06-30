@@ -43,24 +43,6 @@ packages:
       - "sni-cl-tool"
     naming:
       haskell: "status-notifier-item"
-# Compositors
-  picom:
-# Policy kits
-  policykit-gnome:
-    naming:
-      ubuntu: "policykit-1-gnome"
-      arch: "polkit-gnome"
-  policykit-kde:
-    naming:
-      ubuntu: "polkit-kde-agent-1"
-      arch: "polkit-kde-agent"
-# Display Managers
-  lightdm-slick-greeter:
-    naming:
-      ubuntu: "slick-greeter"
-      arch: "lightdm-slick-greeter"
-  light-locker:
-  xss-lock:
 # Development
   libxss:
     naming:
@@ -82,6 +64,26 @@ packages:
     naming:
       ubuntu: "libdbusmenu-gtk3-dev"
       arch: "libdbusmenu-gtk3"
+# Compositors
+  picom:
+# Policy kits
+  policykit-gnome:
+    naming:
+      ubuntu: "policykit-1-gnome"
+      arch: "polkit-gnome"
+  policykit-kde:
+    naming:
+      ubuntu: "polkit-kde-agent-1"
+      arch: "polkit-kde-agent"
+# Display Managers
+  lightdm-slick-greeter:
+    naming:
+      ubuntu: "slick-greeter"
+      arch: "lightdm-slick-greeter"
+  light-locker:
+  xss-lock:
+# Input
+  ibus:
 # UIs
   synapse:
   gnome-screenshot:

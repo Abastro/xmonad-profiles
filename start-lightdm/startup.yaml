@@ -1,9 +1,7 @@
 dependencies:
   - picom
-  - suckless-tools
   - lightdm-slick-greeter
   - light-locker
-  - xss-lock
   - policykit-gnome
   - gnome-keyring
 install: "./startup-install.sh"
