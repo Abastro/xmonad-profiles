@@ -163,7 +163,7 @@ stopRequirements mEnv@ManageEnv{..} MkRequirement{..} = do
   logger "Running custom removal process..."
   customRemove mEnv
 
--- How did I write this
+-- ?? How did I write this ??
 installPackages :: ManageEnv -> PkgDatabase -> ManageID -> InstallCond -> [Package] -> IO ()
 installPackages mEnv@ManageEnv{..} AsPkgDatabase{..} distro cond deps = do
   distroInst <- case distros M.!? originDistro of

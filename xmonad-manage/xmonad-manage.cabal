@@ -19,7 +19,6 @@ executable xmonad-manage
     Packages
     Modules
     Profile
-    Startup
   default-extensions:
     LambdaCase
     RecordWildCards

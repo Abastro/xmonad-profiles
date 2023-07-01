@@ -123,6 +123,11 @@ main = (`catch` handleError) $ do
       logger "Begin"
 
       -- TODO Need better UI for setting up
+      -- logger "Display: "
+      -- logger "Input: "
+      -- logger "Keyring: "
+      -- logger "Policykit: "
+
       ModuleSaved modules <- get varModS
       logger "Current modules are: %s" (show modules)
       logger "Press enter to proceed with current modules,"

@@ -1,6 +1,6 @@
 dependencies:
   - ibus
-run: "./run.sh"
+run: "run.sh"
 environment:
   GTK_IM_MODULE:  "ibus"
   XMODIFIERS:     "@im=ibus"

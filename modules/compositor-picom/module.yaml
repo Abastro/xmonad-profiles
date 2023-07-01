@@ -1,9 +1,9 @@
 dependencies:
   - picom
 # Runner for startup.
-run: "./run.sh"
+run: "run.sh"
 # Custom installer for startup.
-# install: "./install.sh"
+# install: "install.sh"
 # Environment to apply to the session.
 environment:
   # HiDPI scales - Well, other places might be better, but eh.
