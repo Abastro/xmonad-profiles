@@ -1,3 +1,4 @@
+# type: compositor
 dependencies:
   - picom
 # Runner for startup.

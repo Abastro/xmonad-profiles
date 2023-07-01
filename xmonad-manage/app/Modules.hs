@@ -39,6 +39,9 @@ combinedModule home (ModuleSaved modules) = do
   combined <- mconcat <$> traverse loadModule modules
   pure (x11ModuleAt home <> combined)
 
+data ModuleType = Basis | Compositor | Display | Input | PolicyKit | Keyring
+  deriving (Show)
+
 -- | Representation of a module, which is invoked on startup.
 data Module = MkModule
   { requirement :: Requirement

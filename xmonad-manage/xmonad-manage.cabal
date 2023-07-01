@@ -17,6 +17,7 @@ executable xmonad-manage
     Common
     Manages
     Packages
+    Component
     Modules
     Profile
   default-extensions:

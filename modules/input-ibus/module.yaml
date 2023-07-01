@@ -1,3 +1,4 @@
+# type: input
 dependencies:
   - ibus
 run: "run.sh"

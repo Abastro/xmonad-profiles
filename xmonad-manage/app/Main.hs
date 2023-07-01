@@ -123,6 +123,7 @@ main = (`catch` handleError) $ do
       logger "Begin"
 
       -- TODO Need better UI for setting up
+      -- logger "Compositor: "
       -- logger "Display: "
       -- logger "Input: "
       -- logger "Keyring: "
@@ -143,9 +144,9 @@ main = (`catch` handleError) $ do
           get varModS
 
       MkModule{requirement} <- combinedModule home modS
+      pkgDb <- getDatabase mEnv
       distro <- findDistro mEnv
-      withDatabase mEnv $ \pkgDb -> do
-        meetRequirements mEnv pkgDb distro installCond requirement
+      meetRequirements mEnv pkgDb distro installCond requirement
       logger "End"
 
     -- Lists installed profiles
@@ -162,12 +163,12 @@ main = (`catch` handleError) $ do
     InstallProf rawPath installCond -> do
       cfgPath <- canonicalizePath rawPath
       logger "Begin"
+      pkgDb <- getDatabase mEnv
       distro <- findDistro mEnv
-      withDatabase mEnv $ \pkgDb -> do
-        withProfile mEnv cfgPath $ \profile@Profile{profID} -> do
-          meetRequirements mEnv pkgDb distro installCond (profileReqs profile)
-          let addProfile = M.insert profID cfgPath
-          varMS $~ \saved@ManageSaved{profiles} -> saved{profiles = addProfile profiles}
+      withProfile mEnv cfgPath $ \profile@Profile{profID} -> do
+        meetRequirements mEnv pkgDb distro installCond (profileReqs profile)
+        let addProfile = M.insert profID cfgPath
+        varMS $~ \saved@ManageSaved{profiles} -> saved{profiles = addProfile profiles}
       logger "End"
 
     -- Remove a profile

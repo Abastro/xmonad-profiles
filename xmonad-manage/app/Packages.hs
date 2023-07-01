@@ -8,7 +8,8 @@ module Packages (
   Requirement (..),
   InstallCond (..),
   requireDeps,
-  withDatabase,
+  getDatabase,
+  installPackages,
   meetRequirements,
   stopRequirements,
   findDistro,
@@ -145,10 +146,9 @@ findDistro ManageEnv{..} = do
       throwIO (UnknownDistro $ ManageIDOf (T.pack "invalid"))
     Just distro -> pure (ManageIDOf . T.strip $ T.pack distro)
 
-withDatabase :: ManageEnv -> (PkgDatabase -> IO a) -> IO a
-withDatabase ManageEnv{..} withDb = do
-  pkgDatabase <- readYAMLFile DatabaseMalformed (envPath </> "database" </> "system-packages.yaml")
-  withDb pkgDatabase
+getDatabase :: ManageEnv -> IO PkgDatabase
+getDatabase ManageEnv{..} = do
+  readYAMLFile DatabaseMalformed (envPath </> "database" </> "system-packages.yaml")
 
 meetRequirements :: ManageEnv -> PkgDatabase -> ManageID -> InstallCond -> Requirement -> IO ()
 meetRequirements mEnv@ManageEnv{..} pkgDb distro cond MkRequirement{..} = do

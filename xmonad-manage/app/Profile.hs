@@ -74,8 +74,6 @@ withProfile ManageEnv{..} cfgDir withProf = handle @IOError onIOErr $ do
   ProfileCfg{..} <- readYAMLFile ProfileWrongFormat (cfgDir </> "profile.yaml")
   let [dataDir, cacheDir, logDir] = locFor profileID <$> ["data", "cache", "logs"]
   let (profInstall, profBuild, profRun) = (cfgFor <$> installScript, cfgFor buildScript, cfgFor runScript)
-  traverse_ setToExecutable profInstall
-  traverse_ setToExecutable [profBuild, profRun]
   do
     setEnv "ENV_ARCH" arch >> setEnv "ENV_OS" os
     setEnv "XMONAD_DATA_DIR" dataDir
@@ -110,7 +108,9 @@ profileReqs profile@Profile{..} =
 
       for_ profInstall $ \install -> do
         logger "Further installation using %s" (show install)
+        setToExecutable install
         callProcess install []
+      traverse_ setToExecutable [profBuild, profRun]
 
       logger "Building the profile..."
       buildProfile mEnv profile
