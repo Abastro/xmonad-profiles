@@ -163,12 +163,12 @@ stopRequirements mEnv@ManageEnv{..} MkRequirement{..} = do
   logger "Running custom removal process..."
   customRemove mEnv
 
+-- How did I write this
 installPackages :: ManageEnv -> PkgDatabase -> ManageID -> InstallCond -> [Package] -> IO ()
 installPackages mEnv@ManageEnv{..} AsPkgDatabase{..} distro cond deps = do
   distroInst <- case distros M.!? originDistro of
     Just inst -> pure inst
     Nothing -> throwIO (UnknownDistro originDistro)
-  logger "Distro-specific installer command: %s %s" (T.unpack distroInst.instName) (T.unpack distroInst.argInstall)
 
   -- Locate package info.
   let pkgInfos = M.restrictKeys packages depSet

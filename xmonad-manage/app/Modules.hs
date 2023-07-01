@@ -125,7 +125,7 @@ moduleOnStart moduleDir ModuleCfgOf{..} ManageEnv{..} = do
   for_ (M.toList environment) $ \(key, str) -> do
     formatted <- shellExpand str
     setEnv (T.unpack key) (T.unpack formatted)
-  callProcess run []
+  callProcess (moduleDir </> run) []
   logger "[%s] Setup complete." moduleDir
 
 -- Includes XMonad.

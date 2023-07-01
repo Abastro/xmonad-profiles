@@ -66,6 +66,9 @@ packages:
       arch: "libdbusmenu-gtk3"
 # Compositors
   picom:
+    components:
+      executable:
+        - "picom"
 # Policy kits
   policykit-gnome:
     naming:
@@ -77,30 +80,71 @@ packages:
       arch: "polkit-kde-agent"
 # Display Managers
   lightdm-slick-greeter:
+    components:
+      executable:
+        - "slick-greeter"
     naming:
       ubuntu: "slick-greeter"
       arch: "lightdm-slick-greeter"
   light-locker:
+    components:
+      executable:
+        - "light-locker"
   xss-lock:
+    components:
+      executable:
+        - "xss-lock"
 # Input
   ibus:
+    components:
+      executable:
+        - "ibus-setup"
+        - "ibus-daemon"
 # UIs
   synapse:
+    components:
+      executable:
+        - "synapse"
   gnome-screenshot:
+    components:
+      executable:
+        - "gnome-screenshot"
   nemo:
+    components:
+      executable:
+        - "nemo"
 # System Control
   xsettingsd:
+    components:
+      executable:
+        - "xsettingsd"
   feh:
+    components:
+      executable:
+        - "feh"
   light:
+    components:
+      executable:
+        - "light"
   network-manager-applet:
+    components:
+      executable:
+        - "nm-applet"
     naming:
       ubuntu: "network-manager-gnome"
       arch: "network-manager-applet"
   blueman:
 # Tools
   parcellite:
+    components:
+      executable:
+        - "parcellite"
   suckless-tools:
     naming:
       ubuntu: "suckless-tools"
 # Keyring
   gnome-keyring:
+    components:
+      executable:
+        - "gnome-keyring"
+        - "gnome-keyring-daemon"

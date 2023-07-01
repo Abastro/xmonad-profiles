@@ -22,8 +22,6 @@ import qualified Data.Text as T
 
 -- * Fetches from separate configuration directory for each profile.
 
--- ? Install & Run in terms of modules? Think about this.
--- TODO Modularize
 -- TODO Consider how systemd services are run
 -- ? Long-term: Add proxy for package removal.
 
@@ -124,7 +122,7 @@ main = (`catch` handleError) $ do
     Setup installCond -> do
       logger "Begin"
 
-      -- TODO Need better logic
+      -- TODO Need better UI for setting up
       ModuleSaved modules <- get varModS
       logger "Current modules are: %s" (show modules)
       logger "Press enter to proceed with current modules,"

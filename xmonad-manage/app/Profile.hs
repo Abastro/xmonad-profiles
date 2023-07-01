@@ -48,7 +48,7 @@ instance FromYAML ProfileCfg where
       <*> (fmap T.unpack <$> m .:? T.pack "install")
       <*> (T.unpack <$> m .: T.pack "build")
       <*> (T.unpack <$> m .: T.pack "run")
-      <*> (m .: T.pack "dependencies")
+      <*> (m .:? T.pack "dependencies" .!= [])
 
 -- | Profile. Requires the config path to exist.
 data Profile = Profile
@@ -68,6 +68,7 @@ data ProfileError
 
 instance Exception ProfileError
 
+-- TODO Incorporate some with modules.
 withProfile :: ManageEnv -> FilePath -> (Profile -> IO a) -> IO a
 withProfile ManageEnv{..} cfgDir withProf = handle @IOError onIOErr $ do
   ProfileCfg{..} <- readYAMLFile ProfileWrongFormat (cfgDir </> "profile.yaml")
