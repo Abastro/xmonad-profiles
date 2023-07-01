@@ -152,12 +152,12 @@ main = (`catch` handleError) $ do
     -- Lists installed profiles
     ListProf -> do
       logger "Available profiles:"
-      for_ (M.elems profiles) $ \cfgPath ->
-        withProfile mEnv cfgPath $ \Profile{profID, profProps, cfgDir} -> do
-          let ProfileProps{..} = profProps
-          printf "- %s (%s)\n" (idStr profID) profileName
-          printf "    Config at: %s\n" cfgDir
-          printf "    %s\n" profileDetails
+      for_ (M.elems profiles) $ \cfgPath -> do
+        Profile{..} <- loadProfile mEnv cfgPath
+        let ProfileProps{..} = profProps
+        printf "- %s (%s)\n" (idStr profID) profileName
+        printf "    Config at: %s\n" cfgDir
+        printf "    %s\n" profileDetails
 
     -- Profile-specific installation
     InstallProf rawPath installCond -> do
@@ -165,27 +165,27 @@ main = (`catch` handleError) $ do
       logger "Begin"
       pkgDb <- getDatabase mEnv
       distro <- findDistro mEnv
-      withProfile mEnv cfgPath $ \profile@Profile{profID} -> do
-        meetRequirements mEnv pkgDb distro installCond (profileReqs profile)
-        let addProfile = M.insert profID cfgPath
-        varMS $~ \saved@ManageSaved{profiles} -> saved{profiles = addProfile profiles}
+      profile@Profile{profID} <- loadProfile mEnv cfgPath
+      meetRequirements mEnv pkgDb distro installCond (profileReqs profile)
+      let addProfile = M.insert profID cfgPath
+      varMS $~ \saved@ManageSaved{profiles} -> saved{profiles = addProfile profiles}
       logger "End"
 
     -- Remove a profile
     RemoveProf profID -> do
       cfgPath <- getProfile profID
       logger "Begin"
-      withProfile mEnv cfgPath $ \profile@Profile{profID} -> do
-        stopRequirements mEnv (profileReqs profile)
-        let rmProfile = M.delete profID
-        varMS $~ \saved@ManageSaved{profiles} -> saved{profiles = rmProfile profiles}
+      profile@Profile{profID} <- loadProfile mEnv cfgPath
+      stopRequirements mEnv (profileReqs profile)
+      let rmProfile = M.delete profID
+      varMS $~ \saved@ManageSaved{profiles} -> saved{profiles = rmProfile profiles}
       logger "End"
 
     -- Manually build profile
     BuildProf profID -> do
       cfgPath <- getProfile profID
       logger "Begin"
-      withProfile mEnv cfgPath (buildProfile mEnv)
+      loadProfile mEnv cfgPath >>= buildProfile mEnv
       logger "End"
 
     -- Automatic profile run
@@ -196,7 +196,7 @@ main = (`catch` handleError) $ do
         MkModule{onStartup} <- combinedModule home =<< get varModS
         onStartup mEnv
         logger "Booting xmonad..."
-        withProfile mEnv cfgPath (runProfile mEnv)
+        loadProfile mEnv cfgPath >>= runProfile mEnv
         logger "Exit"
   where
     -- MAYBE Do these need to be here?

@@ -2,7 +2,7 @@ module Profile (
   ProfileProps (..),
   Profile (..),
   ProfileError (..),
-  withProfile,
+  loadProfile,
   profileReqs,
   buildProfile,
   runProfile,
@@ -68,9 +68,12 @@ data ProfileError
 
 instance Exception ProfileError
 
+wrapIOError :: FilePath -> IO a -> IO a
+wrapIOError cfgDir = handle @IOError (throwIO . ProfileIOError cfgDir)
+
 -- TODO Incorporate some with modules.
-withProfile :: ManageEnv -> FilePath -> (Profile -> IO a) -> IO a
-withProfile ManageEnv{..} cfgDir withProf = handle @IOError onIOErr $ do
+loadProfile :: ManageEnv -> FilePath -> IO Profile
+loadProfile ManageEnv{..} cfgDir = wrapIOError cfgDir $ do
   ProfileCfg{..} <- readYAMLFile ProfileWrongFormat (cfgDir </> "profile.yaml")
   let [dataDir, cacheDir, logDir] = locFor profileID <$> ["data", "cache", "logs"]
   let (profInstall, profBuild, profRun) = (cfgFor <$> installScript, cfgFor buildScript, cfgFor runScript)
@@ -80,9 +83,8 @@ withProfile ManageEnv{..} cfgDir withProf = handle @IOError onIOErr $ do
     setEnv "XMONAD_CONFIG_DIR" cfgDir
     setEnv "XMONAD_CACHE_DIR" cacheDir
     setEnv "XMONAD_LOG_DIR" logDir
-  withProf $ Profile{profID = profileID, profProps = profileProps, profDeps = dependencies, ..}
+  pure Profile{profID = profileID, profProps = profileProps, profDeps = dependencies, ..}
   where
-    onIOErr = throwIO . ProfileIOError cfgDir
     locFor ident str = envPath </> str </> idStr ident
     cfgFor path = cfgDir </> path
 
@@ -97,7 +99,7 @@ profileReqs profile@Profile{..} =
     , requiredDeps = profDeps
     }
   where
-    customInstall mEnv@ManageEnv{..} = do
+    customInstall mEnv@ManageEnv{..} = wrapIOError cfgDir $ do
       logger "Preparing directories and scripts..."
       traverse_ (createDirectoryIfMissing True) [dataDir, cacheDir, logDir]
       writeFile startPath startScript
@@ -138,7 +140,7 @@ profileReqs profile@Profile{..} =
             (show $ logDir </> "start.err")
         ]
 
-    customRemove ManageEnv{logger} = do
+    customRemove ManageEnv{logger} = wrapIOError cfgDir $ do
       -- * cfgDir is not removed, as it is the source of the entire installation
       logger "Removing profile-specific directories..."
       traverse_ removePathForcibly [dataDir, cacheDir, logDir]
@@ -146,11 +148,11 @@ profileReqs profile@Profile{..} =
       callProcess "sudo" ["rm", "-f", runnerLinkPath profID]
 
 buildProfile :: ManageEnv -> Profile -> IO ()
-buildProfile ManageEnv{logger} Profile{cfgDir, profBuild} = do
+buildProfile ManageEnv{logger} Profile{..} = wrapIOError cfgDir $ do
   logger "Build using %s" (show profBuild)
   withCurrentDirectory cfgDir $ callProcess profBuild []
 
 runProfile :: ManageEnv -> Profile -> IO ()
-runProfile ManageEnv{logger} Profile{profRun} = do
+runProfile ManageEnv{logger} Profile{..} = wrapIOError cfgDir $ do
   logger "Run using %s" (show profRun)
   callProcess profRun []
