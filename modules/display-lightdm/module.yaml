@@ -1,4 +1,5 @@
-# type: display
+type: display
+name: lightdm
 dependencies:
   - lightdm-slick-greeter
   - light-locker

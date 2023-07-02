@@ -1,3 +1,4 @@
+{-# LANGUAGE OverloadedStrings #-}
 module Modules (
   ModuleSaved (..),
   ModuleMode (..),
@@ -47,18 +48,32 @@ data ModuleMode = Start
   deriving (Show, Enum, Bounded)
 
 data ModuleCfg = ModuleCfgOf
-  { install :: !(Maybe FilePath)
+  { moduleType :: !ModuleType
+  , name :: !T.Text
+  , install :: !(Maybe FilePath)
   , run :: !FilePath
   , environment :: !(M.Map T.Text ShellString)
   , dependencies :: [Package] -- Not worth pulling in vector just for this
   }
   deriving (Show)
 
+instance FromYAML ModuleType where
+  parseYAML :: Node Pos -> Parser ModuleType
+  parseYAML = withStr "type" $ pure . \case
+    "compositor" -> Compositor
+    "display" -> Display
+    "input" -> Input
+    "policykit" -> PolicyKit
+    "keyring" -> Keyring
+    _ -> Others
+
 instance FromYAML ModuleCfg where
   parseYAML :: Node Pos -> Parser ModuleCfg
   parseYAML = withMap "module" $ \m ->
     ModuleCfgOf
-      <$> (fmap T.unpack <$> m .:! T.pack "install")
+      <$> (m .: T.pack "type")
+      <*> (m .: T.pack "name")
+      <*> (fmap T.unpack <$> m .:! T.pack "install")
       <*> (T.unpack <$> m .: T.pack "run")
       <*> (m .:? T.pack "environment" .!= M.empty)
       <*> (m .:? T.pack "dependencies" .!= [])
@@ -93,28 +108,28 @@ loadModule moduleDir = moduleOf <$> readYAMLFile userError (moduleDir </> "modul
     moduleOf ModuleCfgOf{..} = deps <> setupEnv <> scripts
       where
         deps = ofDependencies dependencies
-        scripts = fromScript executeScript (scriptFor <$> install) Nothing (\Start -> scriptFor run)
-        setupEnv = ofHandle (setupEnvivonment moduleDir environment)
+        scripts = fromScript (executeScript name) (scriptFor <$> install) Nothing (\Start -> scriptFor run)
+        setupEnv = ofHandle (setupEnvivonment name environment)
 
-executeScript :: ManageEnv -> FilePath -> Context ModuleMode -> IO ()
-executeScript ManageEnv{..} script = \case
+executeScript :: T.Text -> ManageEnv -> FilePath -> Context ModuleMode -> IO ()
+executeScript name ManageEnv{..} script = \case
   CustomInstall -> do
-    logger "Module installation using %s..." script
+    logger "[%s] Module installation using %s..." name script
     callProcess script []
   CustomRemove -> pure ()
   InvokeOn Start -> do
-    logger "Setting up using %s..." script
+    logger "[%s] Setting up using %s..." name script
     callProcess script []
-    logger "Setup complete."
+    logger "[%s] Setup complete." name
 
-setupEnvivonment :: FilePath -> M.Map T.Text ShellString -> ManageEnv -> Context ModuleMode -> IO ()
-setupEnvivonment moduleDir environment ManageEnv{..} = \case
+setupEnvivonment :: T.Text -> M.Map T.Text ShellString -> ManageEnv -> Context ModuleMode -> IO ()
+setupEnvivonment name environment ManageEnv{..} = \case
   CustomInstall -> do
-    logger "[%s] Checking shell expansions..." moduleDir
+    logger "[%s] Checking shell expansions..." name
     forInEnv (logger "[Env] %s=%s")
   CustomRemove -> pure ()
   InvokeOn Start -> do
-    logger "[%s] Setting up..." moduleDir
+    logger "[%s] Setting up..." name
     forInEnv setEnv
   where
     forInEnv act = for_ (M.toList environment) $ \(key, str) -> do

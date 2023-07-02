@@ -1,4 +1,9 @@
-# type: compositor
+# Type of the module.
+# Should be of: compositor, display, input, policykit, keyring.
+# Otherwise, the type is interpreted as "Others" category.
+type: compositor
+name: picom
+# Package dependencies.
 dependencies:
   - picom
 # Runner for startup.

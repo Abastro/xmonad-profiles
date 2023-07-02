@@ -1,4 +1,5 @@
-# type: keyring
+type: keyring
+name: gnome-keyring
 dependencies:
   - gnome-keyring
 run: "run.sh"

@@ -1,4 +1,5 @@
-# type: policykit
+type: policykit
+name: policykit-gnome
 dependencies:
   - policykit-gnome
 run: "run.sh"
