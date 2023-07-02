@@ -4,13 +4,9 @@ module Packages (
   ManageID (..),
   Package (..),
   PkgDatabase,
-  Requirement (..),
   InstallCond (..),
-  requireDeps,
   getDatabase,
   installPackages,
-  meetRequirements,
-  stopRequirements,
   findDistro,
 ) where
 
@@ -119,23 +115,6 @@ instance Exception PkgsError
 
 data InstallCond = WhenAbsent | AlwaysInstall
 
--- | Nicely packed requirements for a component.
-data Requirement = MkRequirement
-  { requiredDeps :: [Package]
-  , customInstall :: ManageEnv -> IO ()
-  , customRemove :: ManageEnv -> IO ()
-  }
-
-requireDeps :: [Package] -> Requirement
-requireDeps deps = MkRequirement deps mempty mempty
-
-instance Semigroup Requirement where
-  (<>) :: Requirement -> Requirement -> Requirement
-  MkRequirement deps inst rm <> MkRequirement deps' inst' rm' = MkRequirement (deps <> deps') (inst <> inst') (rm <> rm')
-instance Monoid Requirement where
-  mempty :: Requirement
-  mempty = MkRequirement mempty mempty mempty
-
 findDistro :: ManageEnv -> IO ManageID
 findDistro ManageEnv{..} = do
   got <- readProcess "lsb_release" ["-i"] []
@@ -148,19 +127,6 @@ findDistro ManageEnv{..} = do
 getDatabase :: ManageEnv -> IO PkgDatabase
 getDatabase ManageEnv{..} = do
   readYAMLFile DatabaseMalformed (envPath </> "database" </> "system-packages.yaml")
-
-meetRequirements :: ManageEnv -> PkgDatabase -> ManageID -> InstallCond -> Requirement -> IO ()
-meetRequirements mEnv@ManageEnv{..} pkgDb distro cond MkRequirement{..} = do
-  logger "Installing dependencies.."
-  installPackages mEnv pkgDb distro cond requiredDeps
-  logger "Running custom installation process.."
-  customInstall mEnv
-
-stopRequirements :: ManageEnv -> Requirement -> IO ()
-stopRequirements mEnv@ManageEnv{..} MkRequirement{..} = do
-  logger "Removing dependencies is not yet implemented."
-  logger "Running custom removal process..."
-  customRemove mEnv
 
 -- ?? How did I write this ??
 installPackages :: ManageEnv -> PkgDatabase -> ManageID -> InstallCond -> [Package] -> IO ()

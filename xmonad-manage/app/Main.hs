@@ -144,10 +144,10 @@ main = (`catch` handleError) $ do
           logger "Modules set to %s." (show modules)
           get varModS
 
-      MkModule{requirement} <- combinedModule home modS
+      modules <- combinedModule home modS
       pkgDb <- getDatabase mEnv
       distro <- findDistro mEnv
-      meetRequirements mEnv pkgDb distro installCond requirement
+      install mEnv pkgDb distro installCond modules
       logger "End"
 
     -- Lists installed profiles
@@ -195,8 +195,8 @@ main = (`catch` handleError) $ do
       cfgPath <- getProfile profID
       withCurrentDirectory home $ do
         logger "Setup"
-        MkModule{onStartup} <- combinedModule home =<< get varModS
-        onStartup mEnv
+        modules <- combinedModule home =<< get varModS
+        invoke mEnv Start modules
         logger "Booting xmonad..."
         (profile, _) <- loadProfile mEnv cfgPath
         invoke mEnv RunMode profile

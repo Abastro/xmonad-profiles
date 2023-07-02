@@ -1,6 +1,6 @@
 module Modules (
-  Module (..),
   ModuleSaved (..),
+  ModuleMode (..),
   mkVarModS,
   combinedModule,
   loadModule,
@@ -8,6 +8,7 @@ module Modules (
 ) where
 
 import Common
+import Component
 import Data.Foldable
 import Data.Map.Strict qualified as M
 import Data.Serialize (Serialize)
@@ -34,7 +35,7 @@ mkVarModS ManageEnv{..} = dataVar "xmonad-manage" "active-modules" $ do
   where
     defModules = ["compositor-picom", "display-lightdm", "policykit-gnome", "input-ibus", "keyring-gnome"]
 
-combinedModule :: FilePath -> ModuleSaved -> IO Module
+combinedModule :: FilePath -> ModuleSaved -> IO (Component ModuleMode)
 combinedModule home (ModuleSaved modules) = do
   combined <- mconcat <$> traverse loadModule modules
   pure (x11ModuleAt home <> combined)
@@ -42,18 +43,8 @@ combinedModule home (ModuleSaved modules) = do
 data ModuleType = Basis | Compositor | Display | Input | PolicyKit | Keyring
   deriving (Show)
 
--- | Representation of a module, which is invoked on startup.
-data Module = MkModule
-  { requirement :: Requirement
-  , onStartup :: ManageEnv -> IO ()
-  }
-
-instance Semigroup Module where
-  (<>) :: Module -> Module -> Module
-  MkModule req start <> MkModule req' start' = MkModule (req <> req') (start <> start')
-instance Monoid Module where
-  mempty :: Module
-  mempty = MkModule mempty mempty
+data ModuleMode = Start
+  deriving (Show, Enum, Bounded)
 
 data ModuleCfg = ModuleCfgOf
   { install :: !(Maybe FilePath)
@@ -95,66 +86,68 @@ shellExpand (MkShellStr strs) = mconcat <$> traverse expand strs
       Str str -> pure str
       Var var -> T.pack <$> getEnv (T.unpack var)
 
-loadModule :: FilePath -> IO Module
-loadModule moduleDir = do
-  cfg <- readYAMLFile userError (moduleDir </> "module.yaml")
-  pure MkModule{requirement = moduleReqs moduleDir cfg, onStartup = moduleOnStart moduleDir cfg}
-
-moduleReqs :: FilePath -> ModuleCfg -> Requirement
-moduleReqs moduleDir ModuleCfgOf{..} =
-  MkRequirement
-    { customInstall
-    , customRemove = mempty
-    , requiredDeps = dependencies
-    }
+loadModule :: FilePath -> IO (Component ModuleMode)
+loadModule moduleDir = moduleOf <$> readYAMLFile userError (moduleDir </> "module.yaml")
   where
-    customInstall ManageEnv{..} = do
-      logger "[%s] Checking shell expansions..." moduleDir
-      for_ (M.toList environment) $ \(key, str) -> do
-        formatted <- shellExpand str
-        logger "[Env] %s=%s" key formatted
+    scriptFor path = moduleDir </> path
+    moduleOf ModuleCfgOf{..} = deps <> setupEnv <> scripts
+      where
+        deps = ofDependencies dependencies
+        scripts = fromScript executeScript (scriptFor <$> install) Nothing (\Start -> scriptFor run)
+        setupEnv = ofHandle (setupEnvivonment moduleDir environment)
 
-      logger "[%s] Custom installation for module..." moduleDir
-      for_ install $ \inst -> do
-        setToExecutable (moduleDir </> inst)
-        callProcess (moduleDir </> inst) []
-      setToExecutable (moduleDir </> run)
-      logger "[%s] Done." moduleDir
+executeScript :: ManageEnv -> FilePath -> Context ModuleMode -> IO ()
+executeScript ManageEnv{..} script = \case
+  CustomInstall -> do
+    logger "Custom installation using %s..." script
+    callProcess script []
+  CustomRemove -> pure ()
+  InvokeOn Start -> do
+    logger "Setting up using %s..." script
+    callProcess script []
+    logger "Setup complete."
 
-moduleOnStart :: FilePath -> ModuleCfg -> ManageEnv -> IO ()
-moduleOnStart moduleDir ModuleCfgOf{..} ManageEnv{..} = do
-  -- Environment setup
-  logger "[%s] Setting up..." moduleDir
-  for_ (M.toList environment) $ \(key, str) -> do
-    formatted <- shellExpand str
-    setEnv (T.unpack key) (T.unpack formatted)
-  callProcess (moduleDir </> run) []
-  logger "[%s] Setup complete." moduleDir
+setupEnvivonment :: FilePath -> M.Map T.Text ShellString -> ManageEnv -> Context ModuleMode -> IO ()
+setupEnvivonment moduleDir environment ManageEnv{..} = \case
+  CustomInstall -> do
+    logger "[%s] Checking shell expansions..." moduleDir
+    forInEnv (logger "[Env] %s=%s")
+  CustomRemove -> pure ()
+  InvokeOn Start -> do
+    logger "[%s] Setting up..." moduleDir
+    forInEnv setEnv
+  where
+    forInEnv act = for_ (M.toList environment) $ \(key, str) -> do
+      formatted <- shellExpand str
+      act (T.unpack key) (T.unpack formatted)
 
 -- Includes XMonad.
-x11ModuleAt :: FilePath -> Module
-x11ModuleAt home = do
-  MkModule{..}
+x11ModuleAt :: FilePath -> Component ModuleMode
+x11ModuleAt home = deps <> xsettings <> xRandr <> xResources <> xSetRoot
   where
-    requirement =
-      MkRequirement
-        { customInstall
-        , customRemove = mempty
-        , -- XMonad requires libxss.
-          requiredDeps = [AsPackage (T.pack "libxss"), AsPackage (T.pack "xmonad"), AsPackage (T.pack "xsettingsd")]
-        }
-    customInstall ManageEnv{..} = do
-      logger "Copying .Xresources and xsettings.conf..."
-      -- Copy X settings and resources
-      copyFile (envPath </> "database" </> ".Xresources") (home </> ".Xresources")
-      copyFile (envPath </> "database" </> "xsettingsd.conf") (home </> ".config" </> "xsettingsd" </> "xsettingsd.conf")
-
-    onStartup ManageEnv{} = do
-      -- X settings daemon to provide settings value
-      _ <- spawnProcess "xsettingsd" []
-      -- Monitor settings use xrandr
-      callProcess "xrandr" []
-      -- Load X resources
-      callProcess "xrdb" ["-merge", home </> ".Xresources"]
-      -- Set root cursor
-      callProcess "xsetroot" ["-cursor_name", "left_ptr"]
+    deps = ofDependencies [AsPackage (T.pack "libxss"), AsPackage (T.pack "xmonad"), AsPackage (T.pack "xsettingsd")]
+    -- X settings daemon to provide settings
+    xsettings = ofHandle $ \ManageEnv{..} -> \case
+      CustomInstall -> do
+        logger "Copying xsettings.conf..."
+        copyFile (envPath </> "database" </> "xsettingsd.conf") (home </> ".config" </> "xsettingsd" </> "xsettingsd.conf")
+      CustomRemove -> logger "You may remove xsettings.conf in ~/.config directory."
+      InvokeOn Start -> do
+        _ <- spawnProcess "xsettingsd" []
+        pure ()
+    -- Load X resources
+    xResources = ofHandle $ \ManageEnv{..} -> \case
+      CustomInstall -> do
+        logger "Copying .Xresources..."
+        copyFile (envPath </> "database" </> ".Xresources") (home </> ".Xresources")
+      CustomRemove -> pure ()
+      InvokeOn Start -> do
+        callProcess "xrdb" ["-merge", home </> ".Xresources"]
+    -- Monitor settings use xrandr
+    xRandr = ofHandle $ \_ -> \case
+      InvokeOn Start -> callProcess "xrandr" []
+      _ -> pure ()
+    -- Set root cursor - maybe we could set other settings as well.
+    xSetRoot = ofHandle $ \_ -> \case
+      InvokeOn Start -> callProcess "xsetroot" ["-cursor_name", "left_ptr"]
+      _ -> pure ()

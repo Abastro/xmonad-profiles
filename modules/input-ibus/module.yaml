@@ -1,6 +1,7 @@
 # type: input
 dependencies:
   - ibus
+install: "install.sh"
 run: "run.sh"
 environment:
   GTK_IM_MODULE:  "ibus"
