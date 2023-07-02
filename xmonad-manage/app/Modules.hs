@@ -40,7 +40,7 @@ combinedModule home (ModuleSaved modules) = do
   combined <- mconcat <$> traverse loadModule modules
   pure (x11ModuleAt home <> combined)
 
-data ModuleType = Basis | Compositor | Display | Input | PolicyKit | Keyring
+data ModuleType = Compositor | Display | Input | PolicyKit | Keyring | Others
   deriving (Show)
 
 data ModuleMode = Start
@@ -99,7 +99,7 @@ loadModule moduleDir = moduleOf <$> readYAMLFile userError (moduleDir </> "modul
 executeScript :: ManageEnv -> FilePath -> Context ModuleMode -> IO ()
 executeScript ManageEnv{..} script = \case
   CustomInstall -> do
-    logger "Custom installation using %s..." script
+    logger "Module installation using %s..." script
     callProcess script []
   CustomRemove -> pure ()
   InvokeOn Start -> do

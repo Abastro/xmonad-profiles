@@ -1,4 +1,4 @@
-# type: input
+type: input
 dependencies:
   - ibus
 install: "install.sh"

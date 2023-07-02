@@ -3,6 +3,7 @@
 module Packages (
   ManageID (..),
   Package (..),
+  packageName,
   PkgDatabase,
   InstallCond (..),
   getDatabase,
@@ -32,6 +33,8 @@ newtype ManageID = ManageIDOf T.Text
 newtype Package = AsPackage T.Text
   deriving stock (Show, Eq, Ord)
   deriving newtype (FromYAML)
+packageName :: Package -> T.Text
+packageName (AsPackage name) = name
 
 -- | Rudimentary package database.
 -- Not a proper DB, and is never meant to be.

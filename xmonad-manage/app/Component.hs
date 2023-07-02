@@ -37,10 +37,11 @@ install mEnv@ManageEnv{..} pkgDb distro cond MkComponent{..} = do
   logger "Running custom installation process.."
   handle mEnv CustomInstall
 
--- TODO When removal is being implemented, both distro and package database is needed.
+--  * When removal is being implemented, both distro and package database is needed.
 remove :: ManageEnv -> Component a -> IO ()
 remove mEnv@ManageEnv{..} MkComponent{..} = do
   logger "Removing dependencies is not yet implemented."
+  logger "Packages %s was installed." (show $ packageName <$> dependencies)
   logger "Running custom removal process..."
   handle mEnv CustomRemove
 
