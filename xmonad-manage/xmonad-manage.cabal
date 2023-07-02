@@ -24,6 +24,7 @@ executable xmonad-manage
     LambdaCase
     RecordWildCards
     NoFieldSelectors
+    OverloadedRecordDot
   build-depends:
       base ^>=4.17.1.0
     , filepath

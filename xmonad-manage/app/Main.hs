@@ -19,6 +19,7 @@ import System.IO
 import System.Process
 import Text.Printf
 import qualified Data.Text as T
+import Component
 
 -- * Fetches from separate configuration directory for each profile.
 
@@ -153,11 +154,10 @@ main = (`catch` handleError) $ do
     ListProf -> do
       logger "Available profiles:"
       for_ (M.elems profiles) $ \cfgPath -> do
-        Profile{..} <- loadProfile mEnv cfgPath
-        let ProfileProps{..} = profProps
-        printf "- %s (%s)\n" (idStr profID) profileName
-        printf "    Config at: %s\n" cfgDir
-        printf "    %s\n" profileDetails
+        ProfileCfg{..} <- readProfileCfg cfgPath
+        printf "- %s (%s)\n" (idStr profileID) profileProps.profileName
+        printf "    Config at: %s\n" cfgPath
+        printf "    %s\n" profileProps.profileDetails
 
     -- Profile-specific installation
     InstallProf rawPath installCond -> do
@@ -165,19 +165,20 @@ main = (`catch` handleError) $ do
       logger "Begin"
       pkgDb <- getDatabase mEnv
       distro <- findDistro mEnv
-      profile@Profile{profID} <- loadProfile mEnv cfgPath
-      meetRequirements mEnv pkgDb distro installCond (profileReqs profile)
-      let addProfile = M.insert profID cfgPath
+      (profile, ident) <- loadProfile mEnv cfgPath
+      install mEnv pkgDb distro installCond profile
+      let addProfile = M.insert ident cfgPath
       varMS $~ \saved@ManageSaved{profiles} -> saved{profiles = addProfile profiles}
       logger "End"
 
     -- Remove a profile
-    RemoveProf profID -> do
-      cfgPath <- getProfile profID
+    RemoveProf ident -> do
+      cfgPath <- getProfile ident
       logger "Begin"
-      profile@Profile{profID} <- loadProfile mEnv cfgPath
-      stopRequirements mEnv (profileReqs profile)
-      let rmProfile = M.delete profID
+      -- Does not care about profile's own ID
+      (profile, _) <- loadProfile mEnv cfgPath
+      remove mEnv profile
+      let rmProfile = M.delete ident
       varMS $~ \saved@ManageSaved{profiles} -> saved{profiles = rmProfile profiles}
       logger "End"
 
@@ -185,7 +186,8 @@ main = (`catch` handleError) $ do
     BuildProf profID -> do
       cfgPath <- getProfile profID
       logger "Begin"
-      loadProfile mEnv cfgPath >>= buildProfile mEnv
+      (profile, _) <- loadProfile mEnv cfgPath
+      invoke mEnv BuildMode profile
       logger "End"
 
     -- Automatic profile run
@@ -196,7 +198,8 @@ main = (`catch` handleError) $ do
         MkModule{onStartup} <- combinedModule home =<< get varModS
         onStartup mEnv
         logger "Booting xmonad..."
-        loadProfile mEnv cfgPath >>= runProfile mEnv
+        (profile, _) <- loadProfile mEnv cfgPath
+        invoke mEnv RunMode profile
         logger "Exit"
   where
     -- MAYBE Do these need to be here?
@@ -205,7 +208,7 @@ main = (`catch` handleError) $ do
         hPrintf stderr "Error: Profile %s not found\n" (idStr profID)
         exitWith (ExitFailure 1)
       ProfileIOError profPath err -> do
-        hPrintf stderr "Error: IO Exception while performing profile action on path %s\n" profPath
+        hPrintf stderr "Error: IO Exception while loading profile on path %s\n" profPath
         hPrintf stderr "Details: %s\n" (show err)
         exitWith (ExitFailure 2)
       ProfileWrongFormat details -> do

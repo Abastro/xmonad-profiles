@@ -1,14 +1,14 @@
 module Profile (
   ProfileProps (..),
-  Profile (..),
+  ProfileCfg (..),
   ProfileError (..),
+  ProfileMode (..),
+  readProfileCfg,
   loadProfile,
-  profileReqs,
-  buildProfile,
-  runProfile,
 ) where
 
 import Common
+import Component
 import Control.Exception
 import Data.Foldable
 import Data.Text qualified as T
@@ -50,81 +50,117 @@ instance FromYAML ProfileCfg where
       <*> (T.unpack <$> m .: T.pack "run")
       <*> (m .:? T.pack "dependencies" .!= [])
 
--- | Profile. Requires the config path to exist.
-data Profile = Profile
-  { profID :: !ID
-  , profProps :: !ProfileProps
-  , profInstall :: !(Maybe FilePath)
-  , profBuild, profRun :: !FilePath
-  , cfgDir, dataDir, cacheDir, logDir :: !FilePath
-  , profDeps :: [Package]
-  }
-
 data ProfileError
   = ProfileNotFound ID
-  | ProfileIOError FilePath IOError
+  | -- | IO Error while "loading" the profile.
+    ProfileIOError FilePath IOError
   | ProfileWrongFormat String
   deriving (Show)
 
 instance Exception ProfileError
 
+readProfileCfg :: FilePath -> IO ProfileCfg
+readProfileCfg cfgDir = wrapIOError cfgDir $ readYAMLFile ProfileWrongFormat (cfgDir </> "profile.yaml")
+
 wrapIOError :: FilePath -> IO a -> IO a
 wrapIOError cfgDir = handle @IOError (throwIO . ProfileIOError cfgDir)
 
--- TODO Incorporate some with modules.
-loadProfile :: ManageEnv -> FilePath -> IO Profile
-loadProfile ManageEnv{..} cfgDir = wrapIOError cfgDir $ do
-  ProfileCfg{..} <- readYAMLFile ProfileWrongFormat (cfgDir </> "profile.yaml")
-  let [dataDir, cacheDir, logDir] = locFor profileID <$> ["data", "cache", "logs"]
-  let (profInstall, profBuild, profRun) = (cfgFor <$> installScript, cfgFor buildScript, cfgFor runScript)
-  do
+data ProfileMode = BuildMode | RunMode
+  deriving (Show, Enum, Bounded)
+
+data Directories = MkDirectories {cfgDir, dataDir, cacheDir, logDir :: !FilePath}
+  deriving (Show)
+
+-- Load profile with the ID.
+loadProfile :: ManageEnv -> FilePath -> IO (Component ProfileMode, ID)
+loadProfile ManageEnv{..} cfgDir = profileOf <$> readProfileCfg cfgDir
+  where
+    locFor ident str = envPath </> str </> idStr ident
+    cfgFor path = cfgDir </> path
+    profileOf cfg@ProfileCfg{..} = (profile, profileID)
+      where
+        dirs =
+          MkDirectories
+            { cfgDir = cfgDir
+            , dataDir = locFor profileID "data"
+            , cacheDir = locFor profileID "cache"
+            , logDir = locFor profileID "logs"
+            }
+
+        profile = deps <> prepDirectory <> prepSession <> setupEnv <> scripts <> buildOnInstall
+        deps = ofDependencies dependencies
+        scripts = fromScript executeScript (cfgFor <$> installScript) Nothing $ \case
+          BuildMode -> cfgFor buildScript
+          RunMode -> cfgFor runScript
+
+        prepDirectory = ofHandle $ prepareDirectory dirs
+        prepSession = ofHandle $ prepareSession cfg dirs
+        setupEnv = ofHandle $ setupEnvironment dirs
+        -- Installation should finish with building the profile.
+        buildOnInstall = ofHandle $ \mEnv -> \case
+          CustomInstall -> invoke mEnv BuildMode profile
+          _ -> pure ()
+
+-- | Executes the respective script, case-by-case basis since given args could be changed.
+executeScript :: ManageEnv -> FilePath -> Context ProfileMode -> IO ()
+executeScript ManageEnv{..} script = \case
+  CustomInstall -> do
+    logger "Install using %s..." script
+    callProcess script []
+  CustomRemove -> do
+    logger "Remove using %s..." script
+    callProcess script []
+  InvokeOn BuildMode -> do
+    logger "Build using %s..." script
+    callProcess script []
+  InvokeOn RunMode -> do
+    logger "Run using %s..." script
+    callProcess script []
+
+setupEnvironment :: Directories -> ManageEnv -> Context a -> IO ()
+setupEnvironment MkDirectories{..} ManageEnv{..} = \case
+  CustomInstall -> pure ()
+  CustomRemove -> pure ()
+  InvokeOn _ -> do
     setEnv "ENV_ARCH" arch >> setEnv "ENV_OS" os
     setEnv "XMONAD_DATA_DIR" dataDir
     setEnv "XMONAD_CONFIG_DIR" cfgDir
     setEnv "XMONAD_CACHE_DIR" cacheDir
     setEnv "XMONAD_LOG_DIR" logDir
-  pure Profile{profID = profileID, profProps = profileProps, profDeps = dependencies, ..}
+
+prepareDirectory :: Directories -> ManageEnv -> Context a -> IO ()
+prepareDirectory MkDirectories{..} ManageEnv{..} = \case
+  CustomInstall -> do
+    logger "Preparing profile directories..."
+    traverse_ (createDirectoryIfMissing True) [dataDir, cacheDir, logDir]
+  CustomRemove -> do
+    logger "Removing profile directories..."
+    traverse_ removePathForcibly [dataDir, cacheDir, logDir]
+  InvokeOn _ -> pure ()
+
+prepareSession :: ProfileCfg -> Directories -> ManageEnv -> Context a -> IO ()
+prepareSession ProfileCfg{..} MkDirectories{..} ManageEnv{..} = \case
+  CustomInstall -> do
+    logger "Installing xsession runner..."
+    writeFile startPath startScript
+    setToExecutable startPath
+    writeFile runnerPath runner
+    -- Instead of linking, we copy the runner. Fixes issues with SDDM.
+    callProcess "sudo" ["cp", "-T", runnerPath, sessionPath]
+  CustomRemove -> do
+    logger "Removing xsession runner..."
+    callProcess "sudo" ["rm", "-f", sessionPath]
+  InvokeOn _ -> pure ()
   where
-    locFor ident str = envPath </> str </> idStr ident
-    cfgFor path = cfgDir </> path
-
--- | Path of the runner file.
-runnerLinkPath profID = "/" </> "usr" </> "share" </> "xsessions" </> idStr profID <.> "desktop"
-
-profileReqs :: Profile -> Requirement
-profileReqs profile@Profile{..} =
-  MkRequirement
-    { customInstall
-    , customRemove
-    , requiredDeps = profDeps
-    }
-  where
-    customInstall mEnv@ManageEnv{..} = wrapIOError cfgDir $ do
-      logger "Preparing directories and scripts..."
-      traverse_ (createDirectoryIfMissing True) [dataDir, cacheDir, logDir]
-      writeFile startPath startScript
-      _ <- setToExecutable startPath
-      writeFile runnerPath (runner profProps)
-      -- Instead of linking, we copy the runner. Fixes issues with SDDM.
-      callProcess "sudo" ["cp", "-T", runnerPath, runnerLinkPath profID]
-
-      for_ profInstall $ \install -> do
-        logger "Further installation using %s" (show install)
-        setToExecutable install
-        callProcess install []
-      traverse_ setToExecutable [profBuild, profRun]
-
-      logger "Building the profile..."
-      buildProfile mEnv profile
-
+    sessionPath = "/" </> "usr" </> "share" </> "xsessions" </> idStr profileID <.> "desktop"
     runnerPath = dataDir </> "run" <.> "desktop"
-    runner ProfileProps{..} =
+    runner =
       unlines
         [ printf "[Desktop Entry]"
         , printf "Encoding=UTF-8"
         , printf "Type=XSession"
-        , printf "Name=%s" profileName
-        , printf "Comment=%s" profileDetails
+        , printf "Name=%s" profileProps.profileName
+        , printf "Comment=%s" profileProps.profileDetails
         , printf "Exec=%s" startPath
         ]
 
@@ -135,24 +171,7 @@ profileReqs profile@Profile{..} =
         , printf "export PATH=$HOME/.cabal/bin:$HOME/.ghcup/bin:$PATH"
         , printf
             "exec xmonad-manage run %s > %s 2> %s"
-            (idStr profID)
+            (idStr profileID)
             (show $ logDir </> "start.log")
             (show $ logDir </> "start.err")
         ]
-
-    customRemove ManageEnv{logger} = wrapIOError cfgDir $ do
-      -- * cfgDir is not removed, as it is the source of the entire installation
-      logger "Removing profile-specific directories..."
-      traverse_ removePathForcibly [dataDir, cacheDir, logDir]
-      logger "Removing xsession runner..."
-      callProcess "sudo" ["rm", "-f", runnerLinkPath profID]
-
-buildProfile :: ManageEnv -> Profile -> IO ()
-buildProfile ManageEnv{logger} Profile{..} = wrapIOError cfgDir $ do
-  logger "Build using %s" (show profBuild)
-  withCurrentDirectory cfgDir $ callProcess profBuild []
-
-runProfile :: ManageEnv -> Profile -> IO ()
-runProfile ManageEnv{logger} Profile{..} = wrapIOError cfgDir $ do
-  logger "Run using %s" (show profRun)
-  callProcess profRun []
