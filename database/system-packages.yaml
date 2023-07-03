@@ -123,6 +123,11 @@ packages:
     components:
       executable:
         - "feh"
+  brightnessctl:
+    components:
+      executable:
+        - "brightnessctl"
+  # light is obsolete now
   light:
     components:
       executable:

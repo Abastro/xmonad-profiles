@@ -27,6 +27,7 @@ import Text.Printf
 -- * Fetches from separate configuration directory for each profile.
 
 -- TODO Consider how systemd services are run
+-- Time to implement the above now, along with fleshing the setup part out.
 -- ? Long-term: Add proxy for package removal.
 
 -- ? Consider: do not install system packages, and instead check for existence of packages?
