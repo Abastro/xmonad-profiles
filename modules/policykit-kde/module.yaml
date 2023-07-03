@@ -1,0 +1,6 @@
+type: policykit
+name: policykit-kde
+dependencies:
+  - policykit-kde
+run: "run.sh"
+environment:

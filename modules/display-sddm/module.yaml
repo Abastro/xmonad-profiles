@@ -1,0 +1,6 @@
+type: display
+name: sddm
+dependencies:
+  - sddm
+run: "run.sh"
+environment:

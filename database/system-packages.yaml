@@ -79,6 +79,7 @@ packages:
       ubuntu: "polkit-kde-agent-1"
       arch: "polkit-kde-agent"
 # Display Managers
+  sddm:
   lightdm-slick-greeter:
     components:
       executable:
