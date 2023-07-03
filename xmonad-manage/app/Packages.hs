@@ -174,7 +174,7 @@ installPkgsWith ManageEnv{..} InstallerOf{..} cond pkgs = do
     WhenAbsent -> do
       (existing, needed) <- M.mapEither id <$> traverse (uncurry $ flip detectInstalled) pkgs
       let targets = M.elems needed
-      logger "Already installed packages: %s" (show $ M.keys existing)
+      logger "Already installed packages: %s" (show . map packageName $ M.keys existing)
       installPkgs targets
     AlwaysInstall -> do
       logger "NOTE: always-install option specified, installation includes preexisting packages."

@@ -3,10 +3,15 @@
 module Main (main) where
 
 import Common
+import Component
 import Control.Exception
 import Data.Foldable
 import Data.Map.Strict qualified as M
+import Data.Maybe
 import Data.StateVar
+import Data.Text qualified as T
+import Data.Traversable
+import Data.Tuple
 import Manages
 import Modules
 import Options.Applicative qualified as Opts
@@ -18,8 +23,6 @@ import System.Exit
 import System.IO
 import System.Process
 import Text.Printf
-import qualified Data.Text as T
-import Component
 
 -- * Fetches from separate configuration directory for each profile.
 
@@ -123,31 +126,43 @@ main = (`catch` handleError) $ do
     Setup installCond -> do
       logger "Begin"
 
-      -- TODO Need better UI for setting up
-      -- logger "Compositor: "
-      -- logger "Display: "
-      -- logger "Input: "
-      -- logger "Keyring: "
-      -- logger "Policykit: "
+      -- ? Improve UIs
+      logger "Setting up modules..."
+      ModuleSaved olds <- get varModS
+      oldActives <- moduleInfos olds
+      logger "Press enter to keep current active modules, or anything else to proceed with specification."
+      getLine >>= \case
+        [] -> logger "Proceeding with currently active modules..."
+        _ -> do
+          allBuiltIns <- moduleInfos (builtInModules mEnv)
+          allTyped <- for [minBound .. maxBound] $ \typ -> do
+            let builtIns = allBuiltIns M.! Just typ
+                activeOnIt = listToMaybe $ oldActives M.! Just typ
+            case activeOnIt of
+              Just (_, name) -> logger "Active %s: %s." (show typ) name
+              Nothing -> logger "No active module for %s." (show typ)
+            logger "Available built-ins: %s" (show $ snd <$> builtIns)
+            logger "Press enter to keep current active module, or specify as in following:"
+            logger "1. To choose a built-in, type its name."
+            logger "2. To use external module, type its path."
+            logger "3. To avoid using a module for %s, type n." (show typ)
+            getLine >>= \case
+              [] -> do
+                logger "Keep current active module for %s." (show typ)
+                pure (fst <$> activeOnIt)
+              name | Just path <- T.pack name `lookup` (swap <$> builtIns) -> do
+                logger "Selected built-in %s for %s." name (show typ)
+                pure (Just path)
+              path -> do
+                logger "Use external module located at %s" path
+                pure (Just path)
+          logger "Custom miscellaneous modules are not yet supported."
+          varModS $= ModuleSaved (catMaybes allTyped)
 
-      ModuleSaved modules <- get varModS
-      logger "Current modules are: %s" (show modules)
-      logger "Press enter to proceed with current modules,"
-      logger "or enter comma-separated module list to change active modules."
-      modS <- getLine >>= \case
-        [] -> do
-          logger "Proceeding..."
-          pure (ModuleSaved modules)
-        list -> do
-          let modules = map T.unpack $ T.splitOn (T.pack ",") $ T.pack list
-          varModS $= ModuleSaved modules
-          logger "Modules set to %s." (show modules)
-          get varModS
-
-      modules <- combinedModule home modS
+      modules <- activeModules home =<< get varModS
       pkgDb <- getDatabase mEnv
       distro <- findDistro mEnv
-      install mEnv pkgDb distro installCond modules
+      install mEnv pkgDb distro installCond (mconcat modules)
       logger "End"
 
     -- Lists installed profiles
@@ -195,8 +210,8 @@ main = (`catch` handleError) $ do
       cfgPath <- getProfile profID
       withCurrentDirectory home $ do
         logger "Setup"
-        modules <- combinedModule home =<< get varModS
-        invoke mEnv Start modules
+        modules <- activeModules home =<< get varModS
+        invoke mEnv Start (mconcat modules)
         logger "Booting xmonad..."
         (profile, _) <- loadProfile mEnv cfgPath
         invoke mEnv RunMode profile

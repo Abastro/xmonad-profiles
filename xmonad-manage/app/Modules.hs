@@ -1,15 +1,19 @@
 {-# LANGUAGE OverloadedStrings #-}
+
 module Modules (
   ModuleSaved (..),
   ModuleMode (..),
   mkVarModS,
-  combinedModule,
+  builtInModules,
+  moduleInfos,
+  activeModules,
   loadModule,
   x11ModuleAt,
 ) where
 
 import Common
 import Component
+import Data.Either
 import Data.Foldable
 import Data.Map.Strict qualified as M
 import Data.Serialize (Serialize)
@@ -29,26 +33,51 @@ newtype ModuleSaved = ModuleSaved [FilePath]
   deriving (Show, Generic)
 instance Serialize ModuleSaved
 
+modulePath envPath ident = envPath </> "modules" </> ident
+
 mkVarModS :: ManageEnv -> (StateVar ModuleSaved, IO ())
 mkVarModS ManageEnv{..} = dataVar "xmonad-manage" "active-modules" $ do
   logger "Cannot load active modules, restored to default. Please run setup."
-  pure . ModuleSaved $ ((envPath </> "modules") </>) <$> defModules
+  pure . ModuleSaved $ modulePath envPath <$> defModules
   where
     defModules = ["compositor-picom", "display-lightdm", "policykit-gnome", "input-ibus", "keyring-gnome"]
 
-combinedModule :: FilePath -> ModuleSaved -> IO (Component ModuleMode)
-combinedModule home (ModuleSaved modules) = do
-  combined <- mconcat <$> traverse loadModule modules
-  pure (x11ModuleAt home <> combined)
+builtInModules :: ManageEnv -> [FilePath]
+builtInModules ManageEnv{..} =
+  modulePath envPath <$> ["compositor-picom", "display-lightdm", "policykit-gnome", "input-ibus", "keyring-gnome"]
 
-data ModuleType = Compositor | Display | Input | PolicyKit | Keyring | Others
-  deriving (Show)
+-- TODO Find a way to use Built-in modules appropriately
+
+data ModuleType = Compositor | Display | Input | PolicyKit | Keyring
+  deriving (Show, Eq, Ord, Enum, Bounded)
 
 data ModuleMode = Start
   deriving (Show, Enum, Bounded)
 
+-- | Information about the given modules.
+moduleInfos :: [FilePath] -> IO (M.Map (Maybe ModuleType) [(FilePath, T.Text)])
+moduleInfos modules = M.fromListWith (++) . (baseline ++) <$> traverse pairedRead modules
+  where
+    baseline = map (, []) (Nothing : map Just [minBound .. maxBound])
+    pairedRead path = do
+      ModuleCfgOf{..} <- readModuleCfg path
+      pure (moduleType, [(path, name)])
+
+-- | Load all active modules.
+activeModules :: FilePath -> ModuleSaved -> IO [Component ModuleMode]
+activeModules home (ModuleSaved modules) = do
+  (others, typed) <- partitionEithers . map classify <$> traverse loadModule modules
+  -- Only load the first ones; Error checking? Maybe later
+  let deduped = M.elems $ M.fromList typed
+  pure (x11ModuleAt home : (deduped <> others))
+  where
+    classify = \case
+      (Nothing, mod) -> Left mod
+      (Just typ, mod) -> Right (typ, mod)
+
+
 data ModuleCfg = ModuleCfgOf
-  { moduleType :: !ModuleType
+  { moduleType :: !(Maybe ModuleType)
   , name :: !T.Text
   , install :: !(Maybe FilePath)
   , run :: !FilePath
@@ -59,19 +88,19 @@ data ModuleCfg = ModuleCfgOf
 
 instance FromYAML ModuleType where
   parseYAML :: Node Pos -> Parser ModuleType
-  parseYAML = withStr "type" $ pure . \case
-    "compositor" -> Compositor
-    "display" -> Display
-    "input" -> Input
-    "policykit" -> PolicyKit
-    "keyring" -> Keyring
-    _ -> Others
+  parseYAML = withStr "type" $ \case
+    "compositor" -> pure Compositor
+    "display" -> pure Display
+    "input" -> pure Input
+    "policykit" -> pure PolicyKit
+    "keyring" -> pure Keyring
+    _ -> fail "invalid type"
 
 instance FromYAML ModuleCfg where
   parseYAML :: Node Pos -> Parser ModuleCfg
   parseYAML = withMap "module" $ \m ->
     ModuleCfgOf
-      <$> (m .: T.pack "type")
+      <$> (m .:! T.pack "type")
       <*> (m .: T.pack "name")
       <*> (fmap T.unpack <$> m .:! T.pack "install")
       <*> (T.unpack <$> m .: T.pack "run")
@@ -101,11 +130,15 @@ shellExpand (MkShellStr strs) = mconcat <$> traverse expand strs
       Str str -> pure str
       Var var -> T.pack <$> getEnv (T.unpack var)
 
-loadModule :: FilePath -> IO (Component ModuleMode)
-loadModule moduleDir = moduleOf <$> readYAMLFile userError (moduleDir </> "module.yaml")
+readModuleCfg :: FilePath -> IO ModuleCfg
+readModuleCfg moduleDir = readYAMLFile userError (moduleDir </> "module.yaml")
+
+-- | Loads module as a comoponent, along with its type.
+loadModule :: FilePath -> IO (Maybe ModuleType, Component ModuleMode)
+loadModule moduleDir = moduleOf <$> readModuleCfg moduleDir
   where
     scriptFor path = moduleDir </> path
-    moduleOf ModuleCfgOf{..} = deps <> setupEnv <> scripts
+    moduleOf ModuleCfgOf{..} = (moduleType, deps <> setupEnv <> scripts)
       where
         deps = ofDependencies dependencies
         scripts = fromScript (executeScript name) (scriptFor <$> install) Nothing (\Start -> scriptFor run)
