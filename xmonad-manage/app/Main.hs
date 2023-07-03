@@ -126,10 +126,11 @@ main = (`catch` handleError) $ do
     Setup installCond -> do
       logger "Begin"
 
-      -- ? Improve UIs
+      -- ? Need to improve UIs, how? Use separate config for this ?
       logger "Setting up modules..."
       ModuleSaved olds <- get varModS
       oldActives <- moduleInfos olds
+      logger "Current modules: %s" (show $ map snd <$> M.elems oldActives)
       logger "Press enter to keep current active modules, or anything else to proceed with specification."
       getLine >>= \case
         [] -> logger "Proceeding with currently active modules..."
