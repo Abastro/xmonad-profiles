@@ -71,6 +71,38 @@ data ProfileMode = BuildMode | RunMode
 data Directories = MkDirectories {cfgDir, dataDir, cacheDir, logDir :: !FilePath}
   deriving (Show)
 
+_profileService :: ProfileCfg -> Directories -> ProfileMode -> Service
+_profileService ProfileCfg{..} MkDirectories{..} = \case
+  BuildMode ->
+    MkService
+      { serviceType = Simple
+      , description = T.pack "Build script for " <> profileProps.profileDetails
+      , stdOutput = JournalWConsole
+      , stdErr = JournalWConsole
+      , execStart = cfgDir </> buildScript
+      , wantedBy = []
+      }
+  RunMode ->
+    MkService
+      { serviceType = Simple
+      , description = profileProps.profileDetails
+      , stdOutput = Journal
+      , stdErr = Journal
+      , execStart = cfgDir </> runScript
+      , wantedBy = []
+      }
+
+profileDeskEntry :: ProfileCfg -> FilePath -> String
+profileDeskEntry ProfileCfg{..} startPath =
+  unlines
+    [ printf "[Desktop Entry]"
+    , printf "Encoding=UTF-8"
+    , printf "Type=XSession"
+    , printf "Name=%s" profileProps.profileName
+    , printf "Comment=%s" profileProps.profileDetails
+    , printf "Exec=%s" startPath
+    ]
+
 -- Load profile with the ID.
 loadProfile :: ManageEnv -> FilePath -> IO (Component ProfileMode, ID)
 loadProfile ManageEnv{..} cfgDir = profileOf <$> readProfileCfg cfgDir
@@ -139,30 +171,21 @@ prepareDirectory MkDirectories{..} ManageEnv{..} = \case
   InvokeOn _ -> pure ()
 
 prepareSession :: ProfileCfg -> Directories -> ManageEnv -> Context a -> IO ()
-prepareSession ProfileCfg{..} MkDirectories{..} ManageEnv{..} = \case
+prepareSession cfg@ProfileCfg{..} MkDirectories{..} ManageEnv{..} = \case
   CustomInstall -> do
     logger "Installing xsession runner..."
     writeFile startPath startScript
     setToExecutable startPath
-    writeFile runnerPath runner
+    writeFile deskEntryPath (profileDeskEntry cfg startPath)
     -- Instead of linking, we copy the runner. Fixes issues with SDDM.
-    callProcess "sudo" ["cp", "-T", runnerPath, sessionPath]
+    callProcess "sudo" ["cp", "-T", deskEntryPath, sessionPath]
   CustomRemove -> do
     logger "Removing xsession runner..."
     callProcess "sudo" ["rm", "-f", sessionPath]
   InvokeOn _ -> pure ()
   where
     sessionPath = "/" </> "usr" </> "share" </> "xsessions" </> idStr profileID <.> "desktop"
-    runnerPath = dataDir </> "run" <.> "desktop"
-    runner =
-      unlines
-        [ printf "[Desktop Entry]"
-        , printf "Encoding=UTF-8"
-        , printf "Type=XSession"
-        , printf "Name=%s" profileProps.profileName
-        , printf "Comment=%s" profileProps.profileDetails
-        , printf "Exec=%s" startPath
-        ]
+    deskEntryPath = dataDir </> "run" <.> "desktop"
 
     startPath = dataDir </> "starter.sh"
     startScript =
