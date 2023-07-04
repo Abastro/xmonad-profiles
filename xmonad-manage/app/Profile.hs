@@ -71,27 +71,6 @@ data ProfileMode = BuildMode | RunMode
 data Directories = MkDirectories {cfgDir, dataDir, cacheDir, logDir :: !FilePath}
   deriving (Show)
 
-_profileService :: ProfileCfg -> Directories -> ProfileMode -> Service
-_profileService ProfileCfg{..} MkDirectories{..} = \case
-  BuildMode ->
-    MkService
-      { serviceType = Simple
-      , description = T.pack "Build script for " <> profileProps.profileDetails
-      , stdOutput = JournalWConsole
-      , stdErr = JournalWConsole
-      , execStart = cfgDir </> buildScript
-      , wantedBy = []
-      }
-  RunMode ->
-    MkService
-      { serviceType = Simple
-      , description = profileProps.profileDetails
-      , stdOutput = Journal
-      , stdErr = Journal
-      , execStart = cfgDir </> runScript
-      , wantedBy = []
-      }
-
 -- Load profile with the ID.
 loadProfile :: ManageEnv -> FilePath -> IO (Component ProfileMode, ID)
 loadProfile ManageEnv{..} cfgDir = profileOf <$> readProfileCfg cfgDir
@@ -134,7 +113,6 @@ executeScript ManageEnv{..} script = \case
   InvokeOn BuildMode -> do
     logger "Build using %s..." script
     callProcess script []
-  -- callProcess "systemctl" ["start", script]
   InvokeOn RunMode -> do
     logger "Run using %s..." script
     callProcess script []
@@ -164,30 +142,36 @@ prepareSession :: ProfileCfg -> Directories -> ManageEnv -> Context a -> IO ()
 prepareSession ProfileCfg{..} MkDirectories{..} ManageEnv{..} = \case
   CustomInstall -> do
     logger "Installing xsession runner..."
-    writeFile deskEntryPath deskEntry
+    writeFile startPath startScript
+    setToExecutable startPath
+    writeFile runnerPath runner
     -- Instead of linking, we copy the runner. Fixes issues with SDDM.
-    callProcess "sudo" ["cp", "-T", deskEntryPath, sessionPath]
+    callProcess "sudo" ["cp", "-T", runnerPath, sessionPath]
   CustomRemove -> do
     logger "Removing xsession runner..."
     callProcess "sudo" ["rm", "-f", sessionPath]
   InvokeOn _ -> pure ()
   where
     sessionPath = "/" </> "usr" </> "share" </> "xsessions" </> idStr profileID <.> "desktop"
-    deskEntryPath = dataDir </> "run" <.> "desktop"
-    deskEntry =
+    runnerPath = dataDir </> "run" <.> "desktop"
+    runner =
       unlines
         [ printf "[Desktop Entry]"
         , printf "Encoding=UTF-8"
         , printf "Type=XSession"
         , printf "Name=%s" profileProps.profileName
         , printf "Comment=%s" profileProps.profileDetails
-        , printf "Exec=%s" runCmd
+        , printf "Exec=%s" startPath
         ]
 
-    runCmd :: String =
-      printf
-        "env PATH=%s xmonad-manage run %s > %s 2> %s"
-        "\\$HOME/.cabal/bin:\\$HOME/.ghcup/bin:\\$PATH"
-        (idStr profileID)
-        (show $ logDir </> "start.log")
-        (show $ logDir </> "start.err")
+    startPath = dataDir </> "starter.sh"
+    startScript =
+      unlines
+        [ printf "#!/bin/sh"
+        , printf "export PATH=$HOME/.cabal/bin:$HOME/.ghcup/bin:$PATH"
+        , printf
+            "exec xmonad-manage run %s > %s 2> %s"
+            (idStr profileID)
+            (show $ logDir </> "start.log")
+            (show $ logDir </> "start.err")
+        ]
