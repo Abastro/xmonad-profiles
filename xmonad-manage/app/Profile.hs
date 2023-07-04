@@ -197,6 +197,6 @@ prepareSession cfg@ProfileCfg{..} MkDirectories{..} ManageEnv{..} = \case
         , printf
             "exec xmonad-manage run %s > %s 2> %s"
             (idStr profileID)
-            (show $ logDir </> "start.log")
-            (show $ logDir </> "start.err")
+            (show $ envPath </> "logs" </> "start.log")
+            (show $ envPath </> "logs" </> "start.err")
         ]

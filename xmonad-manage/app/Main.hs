@@ -31,6 +31,8 @@ import Text.Printf
 -- ? Long-term: Add proxy for package removal.
 
 -- ? xmonad-manage might need to be installed in global directory.
+-- ? Or, "do not go through xmonad-manage" - simpler way. Think about this.
+
 -- ? Consider: do not install system packages, and instead check for existence of packages?
 -- ? Stay up-to-date appropriately corresponding to GHC Updates - How?
 -- If this were statically compiled, it would not matter, but it will take more size.
@@ -115,6 +117,7 @@ main = (`catch` handleError) $ do
         -- In case it is updated, need to reset!
         get varMS
         get varModS
+        -- TODO Copy to /opt/bin directory for running
       logger "Updated."
 
     -- Resets the save if corrupted
