@@ -9,6 +9,10 @@ module Common (
   makeID,
   makeIDM,
   readYAMLFile,
+  ServiceType (..),
+  ServiceStream (..),
+  Service (..),
+  serviceFile,
 ) where
 
 import Control.Applicative
@@ -64,7 +68,7 @@ idStr = coerce
 makeID :: String -> Maybe ID
 makeID ident = ID ident <$ guard (all isAscii ident && not (any isSpace ident))
 
-makeIDM :: MonadFail f => String -> f ID
+makeIDM :: (MonadFail f) => String -> f ID
 makeIDM ident = maybe (fail failMsg) pure $ makeID ident
   where
     failMsg = printf "ID %s contains illegal letter or spaces" ident
@@ -79,3 +83,46 @@ readYAMLFile formatErr path = do
   case decode1 file of
     Left (pos, err) -> (throwIO . formatErr) (prettyPosWithSource pos file "Wrong format" <> err)
     Right st -> pure st
+
+data ServiceType = Simple | Exec
+data ServiceStream = Journal | JournalWConsole | FileWrite !FilePath
+
+-- | A service definition for systemd application.
+data Service = MkService
+  { serviceType :: !ServiceType
+  , description :: !T.Text
+  , stdOutput :: !ServiceStream
+  , stdErr :: !ServiceStream
+  , execStart :: !FilePath
+  , wantedBy :: ![FilePath]
+  }
+
+instance Show ServiceType where
+  show :: ServiceType -> String
+  show = \case
+    Simple -> "simple"
+    Exec -> "exec"
+instance Show ServiceStream where
+  show :: ServiceStream -> String
+  show = \case
+    Journal -> "journal"
+    JournalWConsole -> "journal+console"
+    FileWrite path -> "file:" <> path
+
+serviceFile :: Service -> String
+serviceFile MkService{..} =
+  unlines
+    [ printf "[Unit]"
+    , printf "Description=%s" description
+    , printf "[Service]"
+    , printf "Type=%s" (show serviceType)
+    , printf "StandardOutput=%s" (show stdOutput)
+    , printf "StandardError=%s" (show stdErr)
+    , printf "ExecStart=%s" execStart
+    , printf "[Install]"
+    , wantedByTxt
+    ]
+  where
+    wantedByTxt = case wantedBy of
+      [] -> ""
+      xs -> printf "WantedBy=%s" (unwords xs)

@@ -212,6 +212,7 @@ main = (`catch` handleError) $ do
       cfgPath <- getProfile profID
       withCurrentDirectory home $ do
         logger "Setup"
+        -- TODO Separate directory for module logs
         modules <- activeModules home =<< get varModS
         invoke mEnv Start (mconcat modules)
         logger "Booting xmonad..."
