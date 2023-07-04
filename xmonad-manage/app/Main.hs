@@ -113,11 +113,18 @@ main = (`catch` handleError) $ do
     Update -> do
       logger "Updating..."
       _ <- withCurrentDirectory envPath $ do
-        callProcess "cabal" ["install", "exe:xmonad-manage", "--overwrite-policy=always", "--disable-executable-dynamic"]
+        callProcess
+          "cabal"
+          [ "install"
+          , "exe:xmonad-manage"
+          , "--overwrite-policy=always"
+          , "--disable-executable-dynamic"
+          , "--install-method=copy"
+          ]
         -- In case it is updated, need to reset!
         get varMS
         get varModS
-        -- TODO Copy to /opt/bin directory for running
+      -- TODO Copy to /opt/bin directory for running
       logger "Updated."
 
     -- Resets the save if corrupted
