@@ -30,6 +30,7 @@ import Text.Printf
 -- Time to implement the above now, along with fleshing the setup part out.
 -- ? Long-term: Add proxy for package removal.
 
+-- ? xmonad-manage might need to be installed in global directory.
 -- ? Consider: do not install system packages, and instead check for existence of packages?
 -- ? Stay up-to-date appropriately corresponding to GHC Updates - How?
 -- If this were statically compiled, it would not matter, but it will take more size.

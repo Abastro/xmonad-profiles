@@ -145,9 +145,11 @@ executeScript ManageEnv{..} script = \case
   InvokeOn BuildMode -> do
     logger "Build using %s..." script
     callProcess script []
+    -- callProcess "systemctl" ["start", script]
   InvokeOn RunMode -> do
     logger "Run using %s..." script
     callProcess script []
+    -- callProcess "systemctl" ["start", script]
 
 setupEnvironment :: Directories -> ManageEnv -> Context a -> IO ()
 setupEnvironment MkDirectories{..} ManageEnv{..} = \case
