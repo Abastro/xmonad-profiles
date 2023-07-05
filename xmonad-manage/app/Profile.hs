@@ -10,6 +10,7 @@ module Profile (
 import Common
 import Component
 import Control.Exception
+import Control.Monad
 import Data.Foldable
 import Data.Text qualified as T
 import Data.YAML
@@ -66,31 +67,21 @@ wrapIOError :: FilePath -> IO a -> IO a
 wrapIOError cfgDir = handle @IOError (throwIO . ProfileIOError cfgDir)
 
 data ProfileMode = BuildMode | RunMode
-  deriving (Show, Enum, Bounded)
+  deriving (Show, Eq, Enum, Bounded)
 
 data Directories = MkDirectories {cfgDir, dataDir, cacheDir, logDir :: !FilePath}
   deriving (Show)
 
-_profileService :: ProfileCfg -> Directories -> ProfileMode -> Service
-_profileService ProfileCfg{..} MkDirectories{..} = \case
-  BuildMode ->
-    MkService
-      { serviceType = Simple
-      , description = T.pack "Build script for " <> profileProps.profileDetails
-      , stdOutput = JournalWConsole
-      , stdErr = JournalWConsole
-      , execStart = cfgDir </> buildScript
-      , wantedBy = []
-      }
-  RunMode ->
-    MkService
-      { serviceType = Simple
-      , description = profileProps.profileDetails
-      , stdOutput = Journal
-      , stdErr = Journal
-      , execStart = cfgDir </> runScript
-      , wantedBy = []
-      }
+profileService :: ProfileCfg -> Directories -> Service
+profileService ProfileCfg{..} MkDirectories{..} =
+  MkService
+    { serviceType = Simple
+    , description = profileProps.profileName
+    , stdOutput = Journal
+    , stdErr = Journal
+    , execStart = cfgDir </> runScript
+    , wantedBy = []
+    }
 
 profileDeskEntry :: ProfileCfg -> FilePath -> String
 profileDeskEntry ProfileCfg{..} startPath =
@@ -119,15 +110,16 @@ loadProfile ManageEnv{..} cfgDir = profileOf <$> readProfileCfg cfgDir
             , logDir = locFor profileID "logs"
             }
 
-        profile = deps <> prepDirectory <> prepSession <> setupEnv <> scripts <> buildOnInstall
+        profile = deps <> prepDirectory <> prepSession <> setupEnv <> useService <> scripts <> buildOnInstall
         deps = ofDependencies dependencies
         scripts = fromScript executeScript (cfgFor <$> installScript) Nothing $ \case
           BuildMode -> cfgFor buildScript
           RunMode -> cfgFor runScript
 
+        setupEnv = ofHandle $ setupEnvironment dirs
+        useService = ofHandle $ handleService cfg dirs
         prepDirectory = ofHandle $ prepareDirectory dirs
         prepSession = ofHandle $ prepareSession cfg dirs
-        setupEnv = ofHandle $ setupEnvironment dirs
         -- Installation should finish with building the profile.
         buildOnInstall = ofHandle $ \mEnv -> \case
           CustomInstall -> invoke mEnv BuildMode profile
@@ -143,24 +135,36 @@ executeScript ManageEnv{..} script = \case
     logger "Remove using %s..." script
     callProcess script []
   InvokeOn BuildMode -> do
+    -- It would be great to log to journal, but eh.. not needed anyway.
     logger "Build using %s..." script
     callProcess script []
-    -- callProcess "systemctl" ["start", script]
-  InvokeOn RunMode -> do
-    logger "Run using %s..." script
-    callProcess script []
-    -- callProcess "systemctl" ["start", script]
+  InvokeOn RunMode -> pure () -- Services call the scripts, instead.
 
-setupEnvironment :: Directories -> ManageEnv -> Context a -> IO ()
+setupEnvironment :: Directories -> ManageEnv -> Context ProfileMode -> IO ()
 setupEnvironment MkDirectories{..} ManageEnv{..} = \case
   CustomInstall -> pure ()
   CustomRemove -> pure ()
-  InvokeOn _ -> do
+  InvokeOn mode -> do
     setEnv "ENV_ARCH" arch >> setEnv "ENV_OS" os
+    setEnv "XMONAD_NAME" ("xmonad-" <> arch <> "-" <> os)
     setEnv "XMONAD_DATA_DIR" dataDir
     setEnv "XMONAD_CONFIG_DIR" cfgDir
     setEnv "XMONAD_CACHE_DIR" cacheDir
     setEnv "XMONAD_LOG_DIR" logDir
+    -- TODO Pipe all the relevant environments properly - how? (Likely just do it in modules)
+    -- Also it's silly to hand out ENV_ARCH
+    when (mode == RunMode) $ do
+      callProcess "systemctl" (["--user", "import-environment"] <> envs)
+  where
+    envs =
+      [ "ENV_ARCH"
+      , "ENV_OS"
+      , "XMONAD_NAME"
+      , "XMONAD_DATA_DIR"
+      , "XMONAD_CONFIG_DIR"
+      , "XMONAD_CACHE_DIR"
+      , "XMONAD_LOG_DIR"
+      ]
 
 prepareDirectory :: Directories -> ManageEnv -> Context a -> IO ()
 prepareDirectory MkDirectories{..} ManageEnv{..} = \case
@@ -171,6 +175,25 @@ prepareDirectory MkDirectories{..} ManageEnv{..} = \case
     logger "Removing profile directories..."
     traverse_ removePathForcibly [dataDir, cacheDir, logDir]
   InvokeOn _ -> pure ()
+
+handleService :: ProfileCfg -> Directories -> ManageEnv -> Context ProfileMode -> IO ()
+handleService cfg@ProfileCfg{..} dirs ManageEnv{..} = \case
+  CustomInstall -> do
+    logger "Installing systemd services..."
+    home <- getHomeDirectory
+    createDirectoryIfMissing True (serviceDir home)
+    writeFile (serviceDir home </> serviceName) (serviceFile $ profileService cfg dirs)
+  CustomRemove -> do
+    logger "Removing systemd services..."
+    home <- getHomeDirectory
+    removeFile (serviceDir home </> serviceName)
+  InvokeOn BuildMode -> pure ()
+  InvokeOn RunMode -> do
+    logger "Run through service %s..." serviceName
+    callProcess "systemctl" ["--user", "start", "--wait", serviceName]
+  where
+    serviceName = idStr profileID <.> "service"
+    serviceDir home = home </> ".config" </> "systemd" </> "user"
 
 prepareSession :: ProfileCfg -> Directories -> ManageEnv -> Context a -> IO ()
 prepareSession cfg@ProfileCfg{..} MkDirectories{..} ManageEnv{..} = \case
@@ -184,7 +207,7 @@ prepareSession cfg@ProfileCfg{..} MkDirectories{..} ManageEnv{..} = \case
   CustomRemove -> do
     logger "Removing xsession runner..."
     callProcess "sudo" ["rm", "-f", sessionPath]
-  InvokeOn _ -> pure ()
+  InvokeOn _ -> pure () -- Session is not something to invoke
   where
     sessionPath = "/" </> "usr" </> "share" </> "xsessions" </> idStr profileID <.> "desktop"
     deskEntryPath = dataDir </> "run" <.> "desktop"
@@ -194,6 +217,7 @@ prepareSession cfg@ProfileCfg{..} MkDirectories{..} ManageEnv{..} = \case
       unlines
         [ printf "#!/bin/sh"
         , printf "export PATH=$HOME/.cabal/bin:$HOME/.ghcup/bin:$PATH"
+        , printf "systemctl --user import-environment PATH" -- Blame ghcup for not putting environment inside .profile
         , printf
             "exec xmonad-manage run %s > %s 2> %s"
             (idStr profileID)

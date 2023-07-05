@@ -124,7 +124,7 @@ main = (`catch` handleError) $ do
         -- In case it is updated, need to reset!
         get varMS
         get varModS
-      -- TODO Copy to /opt/bin directory for running
+      -- TODO Copy to /opt/bin directory for running without depending on a user
       logger "Updated."
 
     -- Resets the save if corrupted
