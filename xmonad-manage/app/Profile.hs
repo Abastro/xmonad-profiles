@@ -10,7 +10,6 @@ module Profile (
 import Common
 import Component
 import Control.Exception
-import Control.Monad
 import Data.Foldable
 import Data.Text qualified as T
 import Data.YAML
@@ -72,17 +71,6 @@ data ProfileMode = BuildMode | RunMode
 data Directories = MkDirectories {cfgDir, dataDir, cacheDir, logDir :: !FilePath}
   deriving (Show)
 
-profileService :: ProfileCfg -> Directories -> Service
-profileService ProfileCfg{..} MkDirectories{..} =
-  MkService
-    { serviceType = Simple
-    , description = profileProps.profileName
-    , stdOutput = Journal
-    , stdErr = Journal
-    , execStart = cfgDir </> runScript
-    , wantedBy = []
-    }
-
 profileDeskEntry :: ProfileCfg -> FilePath -> String
 profileDeskEntry ProfileCfg{..} startPath =
   unlines
@@ -140,31 +128,23 @@ executeScript ManageEnv{..} script = \case
     callProcess script []
   InvokeOn RunMode -> pure () -- Services call the scripts, instead.
 
+-- TODO How to properly spawn xmonad service? Perhaps xmonad itself is distinct service?
+-- TODO Should child process be responsible for setting up the service?
 setupEnvironment :: Directories -> ManageEnv -> Context ProfileMode -> IO ()
 setupEnvironment MkDirectories{..} ManageEnv{..} = \case
   CustomInstall -> pure ()
   CustomRemove -> pure ()
   InvokeOn mode -> do
-    setEnv "ENV_ARCH" arch >> setEnv "ENV_OS" os
-    setEnv "XMONAD_NAME" ("xmonad-" <> arch <> "-" <> os)
-    setEnv "XMONAD_DATA_DIR" dataDir
-    setEnv "XMONAD_CONFIG_DIR" cfgDir
-    setEnv "XMONAD_CACHE_DIR" cacheDir
-    setEnv "XMONAD_LOG_DIR" logDir
-    -- TODO Pipe all the relevant environments properly - how? (Likely just do it in modules)
-    -- Also it's silly to hand out ENV_ARCH
-    when (mode == RunMode) $ do
-      callProcess "systemctl" (["--user", "import-environment"] <> envs)
-  where
-    envs =
-      [ "ENV_ARCH"
-      , "ENV_OS"
-      , "XMONAD_NAME"
-      , "XMONAD_DATA_DIR"
-      , "XMONAD_CONFIG_DIR"
-      , "XMONAD_CACHE_DIR"
-      , "XMONAD_LOG_DIR"
-      ]
+    -- On running, feed the environment to the service.
+    let putEnv = case mode of
+          BuildMode -> setEnv
+          RunMode -> setServiceEnv
+    putEnv "ENV_ARCH" arch >> putEnv "ENV_OS" os
+    putEnv "XMONAD_NAME" ("xmonad-" <> arch <> "-" <> os)
+    putEnv "XMONAD_DATA_DIR" dataDir
+    putEnv "XMONAD_CONFIG_DIR" cfgDir
+    putEnv "XMONAD_CACHE_DIR" cacheDir
+    putEnv "XMONAD_LOG_DIR" logDir
 
 prepareDirectory :: Directories -> ManageEnv -> Context a -> IO ()
 prepareDirectory MkDirectories{..} ManageEnv{..} = \case
@@ -182,7 +162,8 @@ handleService cfg@ProfileCfg{..} dirs ManageEnv{..} = \case
     logger "Installing systemd services..."
     home <- getHomeDirectory
     createDirectoryIfMissing True (serviceDir home)
-    writeFile (serviceDir home </> serviceName) (serviceFile $ profileService cfg dirs)
+    -- TODO Write properly
+    -- writeFile (serviceDir home </> serviceName) (serviceFile $ profileService cfg dirs)
   CustomRemove -> do
     logger "Removing systemd services..."
     home <- getHomeDirectory

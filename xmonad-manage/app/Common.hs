@@ -9,6 +9,7 @@ module Common (
   makeID,
   makeIDM,
   readYAMLFile,
+  setServiceEnv,
   ServiceType (..),
   ServiceStream (..),
   Service (..),
@@ -29,6 +30,7 @@ import System.Directory
 import System.FilePath
 import System.IO
 import Text.Printf
+import System.Process
 
 setToExecutable :: FilePath -> IO ()
 setToExecutable path = do
@@ -84,14 +86,19 @@ readYAMLFile formatErr path = do
     Left (pos, err) -> (throwIO . formatErr) (prettyPosWithSource pos file "Wrong format" <> err)
     Right st -> pure st
 
+-- | Sets environment for services.
+setServiceEnv :: String -> String -> IO ()
+setServiceEnv name val = do
+  callProcess "systemctl" ["--user", "set-environment", name <> "=" <> val]
+
 data ServiceType = Simple | Exec
-data ServiceStream = Journal | JournalWConsole | FileWrite !FilePath
+data ServiceStream = Journal | FileWrite !FilePath
 
 -- | A service definition for systemd application.
 data Service = MkService
   { serviceType :: !ServiceType
   , description :: !T.Text
-  , stdOutput :: !ServiceStream
+  , stdOut :: !ServiceStream
   , stdErr :: !ServiceStream
   , execStart :: !FilePath
   , wantedBy :: ![FilePath]
@@ -106,7 +113,6 @@ instance Show ServiceStream where
   show :: ServiceStream -> String
   show = \case
     Journal -> "journal"
-    JournalWConsole -> "journal+console"
     FileWrite path -> "file:" <> path
 
 serviceFile :: Service -> String
@@ -116,7 +122,7 @@ serviceFile MkService{..} =
     , printf "Description=%s" description
     , printf "[Service]"
     , printf "Type=%s" (show serviceType)
-    , printf "StandardOutput=%s" (show stdOutput)
+    , printf "StandardOutput=%s" (show stdOut)
     , printf "StandardError=%s" (show stdErr)
     , printf "ExecStart=%s" execStart
     , printf "[Install]"
