@@ -14,6 +14,10 @@ module Common (
   ServiceStream (..),
   Service (..),
   serviceFile,
+  ShellString,
+  parseShellString,
+  shellExpandWith,
+  shellExpand,
 ) where
 
 import Control.Applicative
@@ -27,10 +31,12 @@ import Data.StateVar
 import Data.Text qualified as T
 import Data.YAML
 import System.Directory
+import System.Environment
 import System.FilePath
 import System.IO
-import Text.Printf
 import System.Process
+import Text.Parsec qualified as P
+import Text.Printf
 
 setToExecutable :: FilePath -> IO ()
 setToExecutable path = do
@@ -91,6 +97,7 @@ setServiceEnv :: String -> String -> IO ()
 setServiceEnv name val = do
   callProcess "systemctl" ["--user", "set-environment", name <> "=" <> val]
 
+-- Well, I set this up, but seems not so useful
 data ServiceType = Simple | Exec
 data ServiceStream = Journal | FileWrite !FilePath
 
@@ -132,3 +139,38 @@ serviceFile MkService{..} =
     wantedByTxt = case wantedBy of
       [] -> ""
       xs -> printf "WantedBy=%s" (unwords xs)
+
+-- | Denotes a string with shell variables embedded.
+newtype ShellString = MkShellStr [ShellStrElem]
+  deriving (Show)
+
+data ShellStrElem = Str !T.Text | Var !T.Text
+  deriving (Show)
+
+parseShellString :: (MonadFail m) => T.Text -> m ShellString
+parseShellString txt = case P.parse shellStr "shell" txt of
+  Left err -> fail (show err)
+  Right res -> pure res
+  where
+    shellStr = MkShellStr <$> P.many elem <* P.eof
+    elem = P.try (Var <$> shellVar P.<|> Str <$> string)
+    -- I do not want to pull megaparsec, and this is the most I could do with parsec
+    string = P.try (T.pack <$> P.many1 (P.noneOf ['$'])) P.<?> "string"
+    shellVar =
+      P.try (T.pack <$> P.between opens closes (P.many1 $ P.noneOf ['}'])) P.<?> "variable"
+    opens = P.try (P.string "${")
+    closes = P.try (P.string "}")
+
+instance FromYAML ShellString where
+  parseYAML :: Node Pos -> Parser ShellString
+  parseYAML = withStr "shell-string" parseShellString
+
+shellExpandWith :: (MonadFail m) => (T.Text -> m T.Text) -> ShellString -> m T.Text
+shellExpandWith act (MkShellStr strs) = mconcat <$> traverse expand strs
+  where
+    expand = \case
+      Str str -> pure str
+      Var var -> act var
+
+shellExpand :: ShellString -> IO T.Text
+shellExpand = shellExpandWith (fmap T.pack . getEnv . T.unpack)

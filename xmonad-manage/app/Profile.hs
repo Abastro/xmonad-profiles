@@ -11,7 +11,9 @@ import Common
 import Component
 import Control.Exception
 import Data.Foldable
+import Data.Map.Strict qualified as M
 import Data.Text qualified as T
+import Data.Text.IO qualified as T
 import Data.YAML
 import Manages
 import Packages
@@ -34,7 +36,7 @@ data ProfileCfg = ProfileCfg
   { profileID :: !ID
   , profileProps :: !ProfileProps
   , installScript :: !(Maybe FilePath)
-  , buildScript, runScript :: !FilePath
+  , buildScript, runService :: !FilePath
   , dependencies :: [Package]
   }
   deriving (Show)
@@ -47,7 +49,7 @@ instance FromYAML ProfileCfg where
       <*> (ProfileProps <$> m .: T.pack "name" <*> m .: T.pack "details")
       <*> (fmap T.unpack <$> m .:? T.pack "install")
       <*> (T.unpack <$> m .: T.pack "build")
-      <*> (T.unpack <$> m .: T.pack "run")
+      <*> (T.unpack <$> m .: T.pack "run-service")
       <*> (m .:? T.pack "dependencies" .!= [])
 
 data ProfileError
@@ -102,7 +104,7 @@ loadProfile ManageEnv{..} cfgDir = profileOf <$> readProfileCfg cfgDir
         deps = ofDependencies dependencies
         scripts = fromScript executeScript (cfgFor <$> installScript) Nothing $ \case
           BuildMode -> cfgFor buildScript
-          RunMode -> cfgFor runScript
+          RunMode -> cfgFor runService
 
         setupEnv = ofHandle $ setupEnvironment dirs
         useService = ofHandle $ handleService cfg dirs
@@ -128,23 +130,27 @@ executeScript ManageEnv{..} script = \case
     callProcess script []
   InvokeOn RunMode -> pure () -- Services call the scripts, instead.
 
--- TODO How to properly spawn xmonad service? Perhaps xmonad itself is distinct service?
--- TODO Should child process be responsible for setting up the service?
+environments :: Directories -> M.Map String String
+environments MkDirectories{..} =
+  M.fromList
+    [ ("ENV_ARCH", arch)
+    , ("ENV_OS", os)
+    , ("XMONAD_NAME", "xmonad-" <> arch <> "-" <> os)
+    , ("XMONAD_DATA_DIR", dataDir)
+    , ("XMONAD_CONFIG_DIR", cfgDir)
+    , ("XMONAD_CACHE_DIR", cacheDir)
+    , ("XMONAD_LOG_DIR", logDir)
+    ]
+
 setupEnvironment :: Directories -> ManageEnv -> Context ProfileMode -> IO ()
-setupEnvironment MkDirectories{..} ManageEnv{..} = \case
+setupEnvironment dirs@MkDirectories{..} ManageEnv{..} = \case
   CustomInstall -> pure ()
   CustomRemove -> pure ()
-  InvokeOn mode -> do
-    -- On running, feed the environment to the service.
-    let putEnv = case mode of
-          BuildMode -> setEnv
-          RunMode -> setServiceEnv
-    putEnv "ENV_ARCH" arch >> putEnv "ENV_OS" os
-    putEnv "XMONAD_NAME" ("xmonad-" <> arch <> "-" <> os)
-    putEnv "XMONAD_DATA_DIR" dataDir
-    putEnv "XMONAD_CONFIG_DIR" cfgDir
-    putEnv "XMONAD_CACHE_DIR" cacheDir
-    putEnv "XMONAD_LOG_DIR" logDir
+  InvokeOn mode -> for_ (M.toList $ environments dirs) (uncurry $ putEnv mode)
+  where
+    putEnv = \case
+      BuildMode -> setEnv
+      RunMode -> setServiceEnv
 
 prepareDirectory :: Directories -> ManageEnv -> Context a -> IO ()
 prepareDirectory MkDirectories{..} ManageEnv{..} = \case
@@ -157,13 +163,13 @@ prepareDirectory MkDirectories{..} ManageEnv{..} = \case
   InvokeOn _ -> pure ()
 
 handleService :: ProfileCfg -> Directories -> ManageEnv -> Context ProfileMode -> IO ()
-handleService cfg@ProfileCfg{..} dirs ManageEnv{..} = \case
+handleService ProfileCfg{..} dirs@MkDirectories{..} ManageEnv{..} = \case
   CustomInstall -> do
     logger "Installing systemd services..."
     home <- getHomeDirectory
     createDirectoryIfMissing True (serviceDir home)
-    -- TODO Write properly
-    -- writeFile (serviceDir home </> serviceName) (serviceFile $ profileService cfg dirs)
+    serviceFile <- T.readFile (cfgDir </> runService) >>= parseShellString
+    T.writeFile (serviceDir home </> serviceName) =<< shellExpandWith (readEnv . T.unpack) serviceFile
   CustomRemove -> do
     logger "Removing systemd services..."
     home <- getHomeDirectory
@@ -175,6 +181,9 @@ handleService cfg@ProfileCfg{..} dirs ManageEnv{..} = \case
   where
     serviceName = idStr profileID <.> "service"
     serviceDir home = home </> ".config" </> "systemd" </> "user"
+    readEnv envName = case environments dirs M.!? envName of
+      Just val -> pure (T.pack val)
+      Nothing -> fail $ "Environment variable" <> envName <> "not found"
 
 prepareSession :: ProfileCfg -> Directories -> ManageEnv -> Context a -> IO ()
 prepareSession cfg@ProfileCfg{..} MkDirectories{..} ManageEnv{..} = \case

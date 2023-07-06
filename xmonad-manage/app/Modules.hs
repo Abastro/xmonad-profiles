@@ -27,7 +27,6 @@ import System.Directory
 import System.Environment
 import System.FilePath
 import System.Process
-import Text.Parsec qualified as P
 
 newtype ModuleSaved = ModuleSaved [FilePath]
   deriving (Show, Generic)
@@ -106,29 +105,6 @@ instance FromYAML ModuleCfg where
       <*> (T.unpack <$> m .: T.pack "run")
       <*> (m .:? T.pack "environment" .!= M.empty)
       <*> (m .:? T.pack "dependencies" .!= [])
-
-newtype ShellString = MkShellStr [ShellStrElem]
-  deriving (Show)
-data ShellStrElem = Str !T.Text | Var !T.Text
-  deriving (Show)
-
-instance FromYAML ShellString where
-  parseYAML :: Node Pos -> Parser ShellString
-  parseYAML = withStr "shell-string" $ \txt -> case P.parse shellStr "shell" txt of
-    Left err -> fail (show err)
-    Right res -> pure res
-    where
-      shellStr = MkShellStr <$> P.many elem <* P.eof
-      elem = Var <$> shellVar P.<|> Str <$> nominal
-      nominal = P.try $ T.pack <$> P.many1 (P.satisfy (/= '}'))
-      shellVar = P.between (P.string "${") (P.string "}") nominal
-
-shellExpand :: ShellString -> IO T.Text
-shellExpand (MkShellStr strs) = mconcat <$> traverse expand strs
-  where
-    expand = \case
-      Str str -> pure str
-      Var var -> T.pack <$> getEnv (T.unpack var)
 
 readModuleCfg :: FilePath -> IO ModuleCfg
 readModuleCfg moduleDir = readYAMLFile userError (moduleDir </> "module.yaml")
