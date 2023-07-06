@@ -36,6 +36,7 @@ data ProfileCfg = ProfileCfg
   , profileProps :: !ProfileProps
   , installScript :: !(Maybe FilePath)
   , buildScript, runService :: !FilePath
+  , otherServices :: [FilePath]
   , dependencies :: [Package]
   }
   deriving (Show)
@@ -49,6 +50,7 @@ instance FromYAML ProfileCfg where
       <*> (fmap T.unpack <$> m .:? T.pack "install")
       <*> (T.unpack <$> m .: T.pack "build")
       <*> (T.unpack <$> m .: T.pack "run-service")
+      <*> (map T.unpack <$> m .:? T.pack "other-services" .!= [])
       <*> (m .:? T.pack "dependencies" .!= [])
 
 data ProfileError
@@ -167,18 +169,25 @@ handleService ProfileCfg{..} dirs@MkDirectories{..} ManageEnv{..} = \case
     logger "Installing systemd services..."
     home <- getHomeDirectory
     createDirectoryIfMissing True (serviceDir home)
-    serviceFile <- T.readFile (cfgDir </> runService) >>= parseShellString
-    T.writeFile (serviceDir home </> serviceName) =<< shellExpandWith (readEnv . T.unpack) serviceFile
+    traverse_ (setupService home) (runService : otherServices)
   CustomRemove -> do
     logger "Removing systemd services..."
     home <- getHomeDirectory
-    removeFile (serviceDir home </> serviceName)
+    traverse_ (removeService home) (runService : otherServices)
+    removeService home runService
   InvokeOn BuildMode -> pure ()
   InvokeOn RunMode -> do
-    logger "Run through service %s..." serviceName
-    callProcess "systemctl" ["--user", "start", "--wait", serviceName]
+    logger "Run through service %s..." (serviceNameOf runService)
+    callProcess "systemctl" ["--user", "start", "--wait", serviceNameOf runService]
   where
-    serviceName = idStr profileID <.> "service"
+    -- Setup service based on "template" at the path.
+    setupService home templatePath = do
+      template <- T.readFile (cfgDir </> templatePath) >>= parseShellString
+      service <- shellExpandWith (readEnv . T.unpack) template
+      T.writeFile (serviceDir home </> serviceNameOf templatePath) service
+    removeService home templatePath = removeFile (serviceDir home </> serviceNameOf templatePath)
+
+    serviceNameOf templatePath = snd (splitFileName templatePath)
     serviceDir home = home </> ".config" </> "systemd" </> "user"
     readEnv envName = case environments dirs M.!? envName of
       Just val -> pure (T.pack val)
