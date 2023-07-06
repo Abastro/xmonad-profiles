@@ -153,8 +153,8 @@ data ShellStrElem = Str !T.Text | Var !T.Text
 -- >>> parseShellString (T.pack "Hello, ${NAME}! ${GREETINGS}.")
 -- MkShellStr [Str "Hello, ",Var "NAME",Str "! ",Var "GREETINGS",Str "."]
 --
-parseShellString :: (MonadFail m) => T.Text -> m ShellString
-parseShellString txt = case P.parse shellStr "shell" txt of
+parseShellString :: (MonadFail m) => String -> T.Text -> m ShellString
+parseShellString name txt = case P.parse shellStr name txt of
   Left err -> fail (show err)
   Right res -> pure res
   where
@@ -169,7 +169,7 @@ parseShellString txt = case P.parse shellStr "shell" txt of
 
 instance FromYAML ShellString where
   parseYAML :: Node Pos -> Parser ShellString
-  parseYAML = withStr "shell-string" parseShellString
+  parseYAML = withStr "shell-string" (parseShellString "shell")
 
 shellExpandWith :: (MonadFail m) => (T.Text -> m T.Text) -> ShellString -> m T.Text
 shellExpandWith act (MkShellStr strs) = mconcat <$> traverse expand strs

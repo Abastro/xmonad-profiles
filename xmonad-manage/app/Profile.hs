@@ -134,9 +134,7 @@ executeScript ManageEnv{..} script = \case
 environments :: Directories -> M.Map String String
 environments MkDirectories{..} =
   M.fromList
-    [ ("ENV_ARCH", arch)
-    , ("ENV_OS", os)
-    , ("XMONAD_NAME", "xmonad-" <> arch <> "-" <> os)
+    [ ("XMONAD_NAME", "xmonad-" <> arch <> "-" <> os)
     , ("XMONAD_DATA_DIR", dataDir)
     , ("XMONAD_CONFIG_DIR", cfgDir)
     , ("XMONAD_CACHE_DIR", cacheDir)
@@ -163,33 +161,41 @@ prepareDirectory MkDirectories{..} ManageEnv{..} = \case
     traverse_ removePathForcibly [dataDir, cacheDir, logDir]
   InvokeOn _ -> pure ()
 
+-- TODO How to: Home directory
 handleService :: ProfileCfg -> Directories -> ManageEnv -> Context ProfileMode -> IO ()
 handleService ProfileCfg{..} dirs@MkDirectories{..} ManageEnv{..} = \case
   CustomInstall -> do
     logger "Installing systemd services..."
     home <- getHomeDirectory
     createDirectoryIfMissing True (serviceDir home)
-    traverse_ (setupService home) (runService : otherServices)
   CustomRemove -> do
     logger "Removing systemd services..."
     home <- getHomeDirectory
     traverse_ (removeService home) (runService : otherServices)
-    removeService home runService
-  InvokeOn BuildMode -> pure ()
+  InvokeOn BuildMode -> do
+    -- Install on build to allow frequent changes of services
+    logger "Installing systemd services..."
+    home <- getHomeDirectory
+    traverse_ (setupService home) (runService : otherServices)
+    callProcess "systemctl" ["--user", "daemon-reload"]
+    logger "Systemd user daemon reloaded."
   InvokeOn RunMode -> do
     logger "Run through service %s..." (serviceNameOf runService)
     callProcess "systemctl" ["--user", "start", "--wait", serviceNameOf runService]
   where
     -- Setup service based on "template" at the path.
     setupService home templatePath = do
-      template <- T.readFile (cfgDir </> templatePath) >>= parseShellString
-      service <- shellExpandWith (readEnv . T.unpack) template
-      T.writeFile (serviceDir home </> serviceNameOf templatePath) service
+      let serviceName = serviceNameOf templatePath
+      template <- T.readFile (cfgDir </> templatePath) >>= parseShellString serviceName
+      service <- shellExpandWith (readEnv home . T.unpack) template
+      T.writeFile (serviceDir home </> serviceName) service
     removeService home templatePath = removeFile (serviceDir home </> serviceNameOf templatePath)
+
+    serviceEnvs home dirs = M.insert "HOME" home $ environments dirs
 
     serviceNameOf templatePath = snd (splitFileName templatePath)
     serviceDir home = home </> ".config" </> "systemd" </> "user"
-    readEnv envName = case environments dirs M.!? envName of
+    readEnv home envName = case serviceEnvs home dirs M.!? envName of
       Just val -> pure (T.pack val)
       Nothing -> fail $ "Environment variable" <> envName <> "not found"
 
