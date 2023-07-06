@@ -24,7 +24,6 @@ import GHC.Generics
 import Manages
 import Packages
 import System.Directory
-import System.Environment
 import System.FilePath
 import System.Process
 
@@ -118,7 +117,7 @@ loadModule moduleDir = moduleOf <$> readModuleCfg moduleDir
       where
         deps = ofDependencies dependencies
         scripts = fromScript (executeScript name) (scriptFor <$> install) Nothing (\Start -> scriptFor run)
-        setupEnv = ofHandle (setupEnvivonment name environment)
+        setupEnv = ofHandle (setupEnvironment name environment)
 
 executeScript :: T.Text -> ManageEnv -> FilePath -> Context ModuleMode -> IO ()
 executeScript name ManageEnv{..} script = \case
@@ -131,15 +130,15 @@ executeScript name ManageEnv{..} script = \case
     callProcess script []
     logger "[%s] Setup complete." name
 
-setupEnvivonment :: T.Text -> M.Map T.Text ShellString -> ManageEnv -> Context ModuleMode -> IO ()
-setupEnvivonment name environment ManageEnv{..} = \case
+setupEnvironment :: T.Text -> M.Map T.Text ShellString -> ManageEnv -> Context ModuleMode -> IO ()
+setupEnvironment name environment ManageEnv{..} = \case
   CustomInstall -> do
     logger "[%s] Checking shell expansions..." name
     forInEnv (logger "[Env] %s=%s")
   CustomRemove -> pure ()
   InvokeOn Start -> do
     logger "[%s] Setting up..." name
-    forInEnv setEnv
+    forInEnv setServiceEnv
   where
     forInEnv act = for_ (M.toList environment) $ \(key, str) -> do
       formatted <- shellExpand str

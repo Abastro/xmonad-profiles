@@ -9,6 +9,7 @@ module Common (
   makeID,
   makeIDM,
   readYAMLFile,
+  setEnv,
   setServiceEnv,
   ServiceType (..),
   ServiceStream (..),
@@ -147,6 +148,11 @@ newtype ShellString = MkShellStr [ShellStrElem]
 data ShellStrElem = Str !T.Text | Var !T.Text
   deriving (Show)
 
+-- | Example:
+--
+-- >>> parseShellString (T.pack "Hello, ${NAME}! ${GREETINGS}.")
+-- MkShellStr [Str "Hello, ",Var "NAME",Str "! ",Var "GREETINGS",Str "."]
+--
 parseShellString :: (MonadFail m) => T.Text -> m ShellString
 parseShellString txt = case P.parse shellStr "shell" txt of
   Left err -> fail (show err)

@@ -18,7 +18,6 @@ import Data.YAML
 import Manages
 import Packages
 import System.Directory
-import System.Environment
 import System.FilePath
 import System.Info (arch, os)
 import System.Process
