@@ -164,7 +164,6 @@ prepareDirectory MkDirectories{..} ManageEnv{..} = \case
 handleService :: ProfileCfg -> Directories -> ManageEnv -> Context ProfileMode -> IO ()
 handleService ProfileCfg{..} dirs@MkDirectories{..} ManageEnv{..} = \case
   CustomInstall -> do
-    logger "Installing systemd services..."
     createDirectoryIfMissing True serviceDir
   CustomRemove -> do
     logger "Removing systemd services..."
@@ -183,15 +182,15 @@ handleService ProfileCfg{..} dirs@MkDirectories{..} ManageEnv{..} = \case
     setupService templatePath = do
       let serviceName = serviceNameOf templatePath
       template <- T.readFile (cfgDir </> templatePath) >>= parseShellString serviceName
-      service <- shellExpandWith (readEnv home . T.unpack) template
+      service <- shellExpandWith (readEnv . T.unpack) template
       T.writeFile (serviceDir </> serviceName) service
     removeService templatePath = removeFile (serviceDir </> serviceNameOf templatePath)
 
     serviceNameOf templatePath = snd (splitFileName templatePath)
     serviceDir = home </> ".config" </> "systemd" </> "user"
 
-    serviceEnvs home dirs = M.insert "HOME" home $ environments dirs
-    readEnv home envName = case serviceEnvs home dirs M.!? envName of
+    serviceEnvs = M.insert "HOME" home $ environments dirs
+    readEnv envName = case serviceEnvs M.!? envName of
       Just val -> pure (T.pack val)
       Nothing -> fail $ "Environment variable" <> envName <> "not found"
 
