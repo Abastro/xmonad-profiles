@@ -26,6 +26,8 @@ instance Serialize ManageSaved
 
 data ManageEnv = ManageEnv
   { envPath :: !FilePath
+  , home :: !FilePath
+  -- ^ Home directory for easier referencing
   , logger :: forall r. (PrintfType r) => String -> r
   }
 

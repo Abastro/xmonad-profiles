@@ -62,12 +62,12 @@ moduleInfos modules = M.fromListWith (++) . (baseline ++) <$> traverse pairedRea
       pure (moduleType, [(path, name)])
 
 -- | Load all active modules.
-activeModules :: FilePath -> ModuleSaved -> IO [Component ModuleMode]
-activeModules home (ModuleSaved modules) = do
+activeModules :: ModuleSaved -> IO [Component ModuleMode]
+activeModules (ModuleSaved modules) = do
   (others, typed) <- partitionEithers . map classify <$> traverse loadModule modules
   -- Only load the first ones; Error checking? Maybe later
   let deduped = M.elems $ M.fromList typed
-  pure (x11ModuleAt home : (deduped <> others))
+  pure (x11ModuleAt : (deduped <> others))
   where
     classify = \case
       (Nothing, mod) -> Left mod
@@ -145,8 +145,8 @@ setupEnvironment name environment ManageEnv{..} = \case
       act (T.unpack key) (T.unpack formatted)
 
 -- Includes XMonad.
-x11ModuleAt :: FilePath -> Component ModuleMode
-x11ModuleAt home = deps <> xsettings <> xRandr <> xResources <> xSetRoot
+x11ModuleAt :: Component ModuleMode
+x11ModuleAt = deps <> xsettings <> xRandr <> xResources <> xSetRoot
   where
     deps = ofDependencies [AsPackage (T.pack "libxss"), AsPackage (T.pack "xmonad"), AsPackage (T.pack "xsettingsd")]
     -- X settings daemon to provide settings

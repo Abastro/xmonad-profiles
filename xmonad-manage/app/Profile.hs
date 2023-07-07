@@ -161,22 +161,18 @@ prepareDirectory MkDirectories{..} ManageEnv{..} = \case
     traverse_ removePathForcibly [dataDir, cacheDir, logDir]
   InvokeOn _ -> pure ()
 
--- TODO How to: Home directory
 handleService :: ProfileCfg -> Directories -> ManageEnv -> Context ProfileMode -> IO ()
 handleService ProfileCfg{..} dirs@MkDirectories{..} ManageEnv{..} = \case
   CustomInstall -> do
     logger "Installing systemd services..."
-    home <- getHomeDirectory
-    createDirectoryIfMissing True (serviceDir home)
+    createDirectoryIfMissing True serviceDir
   CustomRemove -> do
     logger "Removing systemd services..."
-    home <- getHomeDirectory
-    traverse_ (removeService home) (runService : otherServices)
+    traverse_ removeService (runService : otherServices)
   InvokeOn BuildMode -> do
     -- Install on build to allow frequent changes of services
     logger "Installing systemd services..."
-    home <- getHomeDirectory
-    traverse_ (setupService home) (runService : otherServices)
+    traverse_ setupService (runService : otherServices)
     callProcess "systemctl" ["--user", "daemon-reload"]
     logger "Systemd user daemon reloaded."
   InvokeOn RunMode -> do
@@ -184,17 +180,17 @@ handleService ProfileCfg{..} dirs@MkDirectories{..} ManageEnv{..} = \case
     callProcess "systemctl" ["--user", "start", "--wait", serviceNameOf runService]
   where
     -- Setup service based on "template" at the path.
-    setupService home templatePath = do
+    setupService templatePath = do
       let serviceName = serviceNameOf templatePath
       template <- T.readFile (cfgDir </> templatePath) >>= parseShellString serviceName
       service <- shellExpandWith (readEnv home . T.unpack) template
-      T.writeFile (serviceDir home </> serviceName) service
-    removeService home templatePath = removeFile (serviceDir home </> serviceNameOf templatePath)
-
-    serviceEnvs home dirs = M.insert "HOME" home $ environments dirs
+      T.writeFile (serviceDir </> serviceName) service
+    removeService templatePath = removeFile (serviceDir </> serviceNameOf templatePath)
 
     serviceNameOf templatePath = snd (splitFileName templatePath)
-    serviceDir home = home </> ".config" </> "systemd" </> "user"
+    serviceDir = home </> ".config" </> "systemd" </> "user"
+
+    serviceEnvs home dirs = M.insert "HOME" home $ environments dirs
     readEnv home envName = case serviceEnvs home dirs M.!? envName of
       Just val -> pure (T.pack val)
       Nothing -> fail $ "Environment variable" <> envName <> "not found"

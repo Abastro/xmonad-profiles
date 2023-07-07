@@ -103,7 +103,7 @@ main = (`catch` handleError) $ do
   home <- getHomeDirectory
   ManageSaved{managePath = envPath, profiles} <- get varMS
   let logger str = printf (printf "[%s] %s\n" cmdLine str)
-      mEnv = ManageEnv{envPath, logger}
+      mEnv = ManageEnv{envPath, home, logger}
       getProfile profID =
         maybe (throwIO $ ProfileNotFound profID) pure $ profiles M.!? profID
       (varModS, restoreModS) = mkVarModS mEnv
@@ -172,7 +172,7 @@ main = (`catch` handleError) $ do
           logger "Custom miscellaneous modules are not yet supported."
           varModS $= ModuleSaved (catMaybes allTyped)
 
-      modules <- activeModules home =<< get varModS
+      modules <- activeModules =<< get varModS
       pkgDb <- getDatabase mEnv
       distro <- findDistro mEnv
       install mEnv pkgDb distro installCond (mconcat modules)
@@ -223,7 +223,7 @@ main = (`catch` handleError) $ do
       cfgPath <- getProfile profID
       withCurrentDirectory home $ do
         logger "Setup"
-        modules <- activeModules home =<< get varModS
+        modules <- activeModules =<< get varModS
         invoke mEnv Start (mconcat modules)
         logger "Booting xmonad..."
         (profile, _) <- loadProfile mEnv cfgPath
