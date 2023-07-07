@@ -1,3 +1,4 @@
 [submodule "xmonad-test"]
 	path = xmonad-test
 	url = git@github.com:Abastro/xmonad-test.git
+	update = merge
