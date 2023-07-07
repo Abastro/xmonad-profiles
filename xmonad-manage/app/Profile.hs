@@ -181,10 +181,14 @@ handleService ProfileCfg{..} dirs@MkDirectories{..} ManageEnv{..} = \case
     -- Setup service based on "template" at the path.
     setupService templatePath = do
       let serviceName = serviceNameOf templatePath
+      logger "Service %s being installed." serviceName
       template <- T.readFile (cfgDir </> templatePath) >>= parseShellString serviceName
       service <- shellExpandWith (readEnv . T.unpack) template
       T.writeFile (serviceDir </> serviceName) service
-    removeService templatePath = removeFile (serviceDir </> serviceNameOf templatePath)
+    removeService templatePath = do
+      let serviceName = serviceNameOf templatePath
+      logger "Service %s being removed." serviceName
+      removeFile (serviceDir </> serviceName)
 
     serviceNameOf templatePath = snd (splitFileName templatePath)
     serviceDir = home </> ".config" </> "systemd" </> "user"
@@ -192,7 +196,7 @@ handleService ProfileCfg{..} dirs@MkDirectories{..} ManageEnv{..} = \case
     serviceEnvs = M.insert "HOME" home $ environments dirs
     readEnv envName = case serviceEnvs M.!? envName of
       Just val -> pure (T.pack val)
-      Nothing -> fail $ "Environment variable" <> envName <> "not found"
+      Nothing -> fail $ "Environment variable " <> envName <> " not found"
 
 prepareSession :: ProfileCfg -> Directories -> ManageEnv -> Context a -> IO ()
 prepareSession cfg@ProfileCfg{..} MkDirectories{..} ManageEnv{..} = \case
