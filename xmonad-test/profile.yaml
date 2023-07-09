@@ -1,0 +1,43 @@
+# Profile Configuration
+
+# Profile ID, should be ASCII w/o spaces
+ID: "xmonad-test"
+
+# Human-readable Profile Name
+name: "XMonad-Test"
+
+# Details on comments
+details: "XMonad test profile"
+
+# Install script could be optionally specified.
+# Might call sudo.
+# install: "/your/path/name"
+
+# Build script to apply configuration changes.
+# Executables should be installed in "$XMONAD_CACHE_DIR".
+# "$ENV_ARCH" denotes the architecture, and "$ENV_OS" denotes the OS.
+# Current directory is set as the config directory.
+# Should never call sudo.
+build: "build.sh"
+
+# Main systemd service to run.
+# A service file can contain variables like XMONAD_CACHE_DIR, XMONAD_DATA_DIR, XMONAD_CONFIG_DIR,
+# which will be replaced when installed.
+# Variables should be denoted by e.g. ${XMONAD_CACHE_DIR}.
+# It is recommended to specify executable as "ExecStart=${XMONAD_CACHE_DIR}/${XMONAD_NAME}".
+run-service: "xmonad-test.service"
+
+# Other systemd services to consider.
+# While xmonad-manage does not start it, the main service file can make use of it.
+# other-services:
+
+# * Unused *
+# Run script. May run executables installed in "$XMONAD_CACHE_DIR".
+# "$ENV_ARCH" denotes the architecture, and "$ENV_OS" denotes the OS.
+# Current directory is set as "$HOME".
+run: "run.sh"
+
+# Dependencies which can be installed via package manager or cabal.
+# These are those available in the database folder.
+dependencies:
+  - feh

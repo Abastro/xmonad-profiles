@@ -1,0 +1,29 @@
+cabal-version:      2.4
+name:               xmonad-test
+version:            0.1.1.0
+synopsis:
+-- description:
+homepage:
+license:            BSD-3-Clause
+license-file:       LICENSE
+author:             Abastro
+maintainer:         abab9579@gmail.com
+-- copyright:
+-- category:
+extra-source-files:
+
+executable xmonad-test
+  main-is:          Main.hs
+  build-depends:       
+      base >=4.14 && <5
+    , containers
+    , filepath
+    , directory
+    , X11
+    , unix
+    , xmonad >=0.13
+    , xmonad-contrib >=0.14
+
+  hs-source-dirs:   app
+  default-language: Haskell2010
+  ghc-options:  -W  -threaded +RTS -N -RTS -debug
