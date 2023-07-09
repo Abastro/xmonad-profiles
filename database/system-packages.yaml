@@ -119,6 +119,13 @@ packages:
     components:
       executable:
         - "xsettingsd"
+  xsetroot:
+    components:
+      executable:
+        - "xsetroot"
+    naming:
+      # Ubuntu: installed by default
+      arch: "xorg-xsetroot"
   feh:
     components:
       executable:

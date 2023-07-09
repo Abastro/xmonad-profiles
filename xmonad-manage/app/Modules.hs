@@ -148,7 +148,8 @@ setupEnvironment name environment ManageEnv{..} = \case
 x11ModuleAt :: Component ModuleMode
 x11ModuleAt = deps <> xsettings <> xRandr <> xResources <> xSetRoot
   where
-    deps = ofDependencies [AsPackage (T.pack "libxss"), AsPackage (T.pack "xmonad"), AsPackage (T.pack "xsettingsd")]
+    -- Perhaps put xorg instead? But reinstalling entire xorg is not great.
+    deps = ofDependencies [AsPackage (T.pack "libxss"), AsPackage (T.pack "xmonad"), AsPackage (T.pack "xsettingsd"), AsPackage (T.pack "xsetroot")]
     -- X settings daemon to provide settings
     xsettings = ofHandle $ \ManageEnv{..} -> \case
       CustomInstall -> do
