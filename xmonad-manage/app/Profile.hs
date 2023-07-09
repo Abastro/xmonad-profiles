@@ -142,14 +142,12 @@ environments MkDirectories{..} =
     ]
 
 setupEnvironment :: Directories -> ManageEnv -> Context ProfileMode -> IO ()
-setupEnvironment dirs@MkDirectories{..} ManageEnv{..} = \case
-  CustomInstall -> pure ()
-  CustomRemove -> pure ()
-  InvokeOn mode -> for_ (M.toList $ environments dirs) (uncurry $ putEnv mode)
+setupEnvironment dirs@MkDirectories{..} ManageEnv{..} mode = do
+  for_ (M.toList $ environments dirs) (uncurry putEnv)
   where
-    putEnv = \case
-      BuildMode -> setEnv
-      RunMode -> setServiceEnv
+    putEnv = case mode of
+      InvokeOn RunMode -> setServiceEnv
+      _ -> setEnv
 
 prepareDirectory :: Directories -> ManageEnv -> Context a -> IO ()
 prepareDirectory MkDirectories{..} ManageEnv{..} = \case
