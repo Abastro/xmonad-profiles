@@ -153,6 +153,8 @@ x11ModuleAt = deps <> xsettings <> xRandr <> xResources <> xSetRoot
     xsettings = ofHandle $ \ManageEnv{..} -> \case
       CustomInstall -> do
         logger "Copying xsettings.conf..."
+        -- Forgot: Need to create directory first
+        createDirectoryIfMissing True (home </> ".config" </> "xsettingsd")
         copyFile (envPath </> "database" </> "xsettingsd.conf") (home </> ".config" </> "xsettingsd" </> "xsettingsd.conf")
       CustomRemove -> logger "You may remove xsettings.conf in ~/.config directory."
       InvokeOn Start -> do
