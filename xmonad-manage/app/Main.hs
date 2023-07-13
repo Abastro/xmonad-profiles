@@ -172,7 +172,7 @@ main = (`catch` handleError) $ do
           logger "Custom miscellaneous modules are not yet supported."
           varModS $= ModuleSaved (catMaybes allTyped)
 
-      modules <- activeModules =<< get varModS
+      modules <- activeModules mEnv =<< get varModS
       pkgDb <- getDatabase mEnv
       distro <- findDistro mEnv
       install mEnv pkgDb distro installCond (mconcat modules)
@@ -223,7 +223,7 @@ main = (`catch` handleError) $ do
       cfgPath <- getProfile profID
       withCurrentDirectory home $ do
         logger "Setup"
-        modules <- activeModules =<< get varModS
+        modules <- activeModules mEnv =<< get varModS
         invoke mEnv Start (mconcat modules)
         logger "Booting xmonad..."
         (profile, _) <- loadProfile mEnv cfgPath

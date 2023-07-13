@@ -1,0 +1,16 @@
+# Default module for X11 & XMonad.
+name: x11-xmonad
+dependencies:
+  - libxss
+  - xmonad
+  - xsettingsd
+  - xsetroot
+run: "run.sh"
+install: "install.sh"
+environment:
+  # Theming; This is a workaround for now.
+  GTK_THEME: "Yaru-dark"
+  # HiDPI scales.
+  QT_AUTO_SCREEN_SCALE_FACTOR: "1"
+  # Theming, in case it is needed.
+  QT_QPA_PLATFORMTHEME: "qt5ct"

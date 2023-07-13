@@ -34,17 +34,16 @@ instance Serialize ModuleSaved
 modulePath envPath ident = envPath </> "modules" </> ident
 
 mkVarModS :: ManageEnv -> (StateVar ModuleSaved, IO ())
-mkVarModS ManageEnv{..} = dataVar "xmonad-manage" "active-modules" $ do
+mkVarModS mEnv@ManageEnv{..} = dataVar "xmonad-manage" "active-modules" $ do
   logger "Cannot load active modules, restored to default. Please run setup."
-  pure . ModuleSaved $ modulePath envPath <$> defModules
-  where
-    defModules = ["compositor-picom", "display-lightdm", "policykit-gnome", "input-ibus", "keyring-gnome"]
+  pure . ModuleSaved $ builtInModules mEnv
 
 builtInModules :: ManageEnv -> [FilePath]
 builtInModules ManageEnv{..} =
   modulePath envPath <$> ["compositor-picom", "display-lightdm", "policykit-gnome", "input-ibus", "keyring-gnome"]
 
 -- TODO Find a way to use Built-in modules appropriately
+-- TODO More flexibility (e.g. necessary module?)
 
 data ModuleType = Compositor | Display | Input | PolicyKit | Keyring
   deriving (Show, Eq, Ord, Enum, Bounded)
@@ -62,12 +61,13 @@ moduleInfos modules = M.fromListWith (++) . (baseline ++) <$> traverse pairedRea
       pure (moduleType, [(path, name)])
 
 -- | Load all active modules.
-activeModules :: ModuleSaved -> IO [Component ModuleMode]
-activeModules (ModuleSaved modules) = do
+activeModules :: ManageEnv -> ModuleSaved -> IO [Component ModuleMode]
+activeModules ManageEnv{..} (ModuleSaved modules) = do
+  (_, x11Module) <-  loadModule (modulePath envPath "x11-xmonad") -- Currently hard-coded.
   (others, typed) <- partitionEithers . map classify <$> traverse loadModule modules
   -- Only load the first ones; Error checking? Maybe later
   let deduped = M.elems $ M.fromList typed
-  pure (x11ModuleAt : (deduped <> others))
+  pure (x11Module : deduped <> others)
   where
     classify = \case
       (Nothing, mod) -> Left mod
@@ -144,6 +144,7 @@ setupEnvironment name environment ManageEnv{..} = \case
       formatted <- shellExpand str
       act (T.unpack key) (T.unpack formatted)
 
+-- TODO Use hard-coded module instead.
 -- Includes XMonad.
 x11ModuleAt :: Component ModuleMode
 x11ModuleAt = deps <> xsettings <> xRandr <> xResources <> xSetRoot

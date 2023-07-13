@@ -124,7 +124,7 @@ packages:
       executable:
         - "xsetroot"
     naming:
-      # Ubuntu: installed by default
+      ubuntu: "x11-xserver-utils"
       arch: "xorg-xsetroot"
   feh:
     components:
