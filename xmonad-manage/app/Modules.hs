@@ -2,17 +2,18 @@
 
 module Modules (
   ModuleSaved (..),
+  ModuleType (..),
   ModuleMode (..),
-  mkVarModS,
-  builtInModules,
-  moduleInfos,
+  ModuleSet (..),
+  ModuleCfg (..),
+  mkVarModule,
+  builtInForType,
+  activeModuleCfgs,
   activeModules,
-  loadModule,
 ) where
 
 import Common
 import Component
-import Data.Either
 import Data.Foldable
 import Data.Map.Strict qualified as M
 import Data.Serialize (Serialize)
@@ -25,54 +26,84 @@ import Packages
 import System.FilePath
 import System.Process
 
-newtype ModuleSaved = ModuleSaved [FilePath]
-  deriving (Show, Generic)
-instance Serialize ModuleSaved
-
-modulePath envPath ident = envPath </> "modules" </> ident
-
-mkVarModS :: ManageEnv -> (StateVar ModuleSaved, IO ())
-mkVarModS mEnv@ManageEnv{..} = dataVar "xmonad-manage" "active-modules" $ do
-  logger "Cannot load active modules, restored to default. Please run setup."
-  pure . ModuleSaved $ builtInModules mEnv
-
-builtInModules :: ManageEnv -> [FilePath]
-builtInModules ManageEnv{..} =
-  modulePath envPath <$> ["compositor-picom", "display-lightdm", "policykit-gnome", "input-ibus", "keyring-gnome"]
+builtInModules :: M.Map ModuleType [String]
+builtInModules =
+  M.fromList
+    [ (X11, ["x11-xmonad"])
+    , (Compositor, ["compositor-picom"])
+    , (Display, ["display-lightdm", "display-sddm"])
+    , (PolicyKit, ["policykit-gnome", "policykit-kde"])
+    , (Keyring, ["keyring-gnome"])
+    , (Input, ["input-ibus"])
+    ]
 
 -- TODO Find a way to use Built-in modules appropriately
 -- TODO More flexibility (e.g. necessary module?)
--- TODO Handle when new built-in module is added - not needed for now, but eh..
--- Migrating to DB with direct-sqlite should be first step.
+-- TODO Migrating to DB with direct-sqlite, and then enable proper upgrading.
 
-data ModuleType = Compositor | Display | Input | PolicyKit | Keyring
-  deriving (Show, Eq, Ord, Enum, Bounded)
+data ModuleType = X11 | Compositor | Display | Input | PolicyKit | Keyring
+  deriving (Show, Eq, Ord, Enum, Bounded, Generic)
 
 data ModuleMode = Start
   deriving (Show, Enum, Bounded)
 
--- | Information about the given modules.
-moduleInfos :: [FilePath] -> IO (M.Map (Maybe ModuleType) [(FilePath, T.Text)])
-moduleInfos modules = M.fromListWith (++) . (baseline ++) <$> traverse pairedRead modules
+-- | Whether a module is required for a type.
+-- Only used for nwe configuration as one may preserve existing setup.
+data RequiredType = Fixed | Required | Optional
+  deriving (Show)
+
+data ModulePath = BuiltIn String | External FilePath
+  deriving (Show, Generic)
+
+-- | Module set parameterized by way of storing modules.
+-- Could be actual modules, path of modules, or be the set of metadata.
+--
+-- * NOTE: Typed modules are loaded before other modules.
+data ModuleSet a = ModuleSetOf
+  { typedModules :: M.Map ModuleType a
+  , otherModules :: [a]
+  }
+  deriving (Show, Functor, Foldable, Traversable, Generic)
+
+instance Serialize ModuleType
+instance Serialize ModulePath
+instance (Serialize a) => Serialize (ModuleSet a)
+
+-- | Save data for modules.
+newtype ModuleSaved = ModuleSaved
+  { moduleSet :: ModuleSet ModulePath
+  }
+  deriving (Show, Generic)
+
+instance Serialize ModuleSaved
+
+mkVarModule :: ManageEnv -> (StateVar ModuleSaved, IO ())
+mkVarModule _mEnv@ManageEnv{..} = dataVar "xmonad-manage" "active-modules" $ do
+  logger "Cannot load active modules, restored to default. Please run setup."
+  pure . ModuleSaved $ ModuleSetOf{typedModules = defModules, otherModules = []}
   where
-    baseline = map (, []) (Nothing : map Just [minBound .. maxBound])
-    pairedRead path = do
-      ModuleCfgOf{..} <- readModuleCfg path
-      pure (moduleType, [(path, name)])
+    defModules = M.mapMaybe selectFst builtInModules
+    selectFst = \case
+      [] -> Nothing
+      name : _ -> Just (BuiltIn name)
+
+canonPath :: ManageEnv -> ModulePath -> FilePath
+canonPath ManageEnv{..} = \case
+  BuiltIn ident -> envPath </> "modules" </> ident
+  External path -> path
+
+moduleCfgs :: (Traversable t) => ManageEnv -> t ModulePath -> IO (t ModuleCfg)
+moduleCfgs mEnv = traverse (readModuleCfg . canonPath mEnv)
+
+builtInForType :: ManageEnv -> ModuleType -> IO [ModuleCfg]
+builtInForType mEnv moduleType = moduleCfgs mEnv (BuiltIn <$> builtInModules M.! moduleType)
+
+activeModuleCfgs :: ManageEnv -> ModuleSaved -> IO (ModuleSet ModuleCfg)
+activeModuleCfgs mEnv saved = moduleCfgs mEnv saved.moduleSet
 
 -- | Load all active modules.
 activeModules :: ManageEnv -> ModuleSaved -> IO [Component ModuleMode]
-activeModules ManageEnv{..} (ModuleSaved modules) = do
-  (_, x11Module) <-  loadModule (modulePath envPath "x11-xmonad") -- Currently hard-coded.
-  (others, typed) <- partitionEithers . map classify <$> traverse loadModule modules
-  -- Only load the first ones; Error checking? Maybe later
-  let deduped = M.elems $ M.fromList typed
-  pure (x11Module : deduped <> others)
-  where
-    classify = \case
-      (Nothing, mod) -> Left mod
-      (Just typ, mod) -> Right (typ, mod)
-
+activeModules mEnv saved = toList <$> traverse (loadModule . canonPath mEnv) saved.moduleSet
 
 data ModuleCfg = ModuleCfgOf
   { moduleType :: !(Maybe ModuleType)
@@ -109,11 +140,11 @@ readModuleCfg :: FilePath -> IO ModuleCfg
 readModuleCfg moduleDir = readYAMLFile userError (moduleDir </> "module.yaml")
 
 -- | Loads module as a comoponent, along with its type.
-loadModule :: FilePath -> IO (Maybe ModuleType, Component ModuleMode)
+loadModule :: FilePath -> IO (Component ModuleMode)
 loadModule moduleDir = moduleOf <$> readModuleCfg moduleDir
   where
     scriptFor path = moduleDir </> path
-    moduleOf ModuleCfgOf{..} = (moduleType, deps <> setupEnv <> scripts)
+    moduleOf ModuleCfgOf{..} = deps <> setupEnv <> scripts
       where
         deps = ofDependencies dependencies
         scripts = fromScript (executeScript name) (scriptFor <$> install) Nothing (\Start -> scriptFor run)

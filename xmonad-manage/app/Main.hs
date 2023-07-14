@@ -106,7 +106,7 @@ main = (`catch` handleError) $ do
       mEnv = ManageEnv{envPath, home, logger}
       getProfile profID =
         maybe (throwIO $ ProfileNotFound profID) pure $ profiles M.!? profID
-      (varModS, restoreModS) = mkVarModS mEnv
+      (varModS, restoreModS) = mkVarModule mEnv
 
   Opts.customExecParser optPrefs manageOpts >>= \case
     -- Updates xmonad-manage
@@ -140,37 +140,41 @@ main = (`catch` handleError) $ do
 
       -- ? Need to improve UIs, how? Use separate config for this ?
       logger "Setting up modules..."
-      ModuleSaved olds <- get varModS
-      oldActives <- moduleInfos olds
-      logger "Current modules: %s" (show $ map snd <$> M.elems oldActives)
+      modSaved <- get varModS
+      oldModules <- activeModuleCfgs mEnv modSaved
+
+      logger "Current modules:"
+      for_ [minBound .. maxBound] $ \typ -> do
+        case oldModules.typedModules M.!? typ of
+          Just mod -> logger "%s: %s" typ mod.name
+          Nothing -> logger "%s: None" typ
+      logger "Extras: %s" $ (\mod -> mod.name) <$> oldModules.otherModules
       logger "Press enter to keep current active modules, or anything else to proceed with specification."
+
       getLine >>= \case
         [] -> logger "Proceeding with currently active modules..."
         _ -> do
-          allBuiltIns <- moduleInfos (builtInModules mEnv)
           allTyped <- for [minBound .. maxBound] $ \typ -> do
-            let builtIns = allBuiltIns M.! Just typ
-                activeOnIt = listToMaybe $ oldActives M.! Just typ
-            case activeOnIt of
-              Just (_, name) -> logger "Active %s: %s." (show typ) name
-              Nothing -> logger "No active module for %s." (show typ)
-            logger "Available built-ins: %s" (show $ snd <$> builtIns)
-            logger "Press enter to keep current active module, or specify as in following:"
-            logger "1. To choose a built-in, type its name."
-            logger "2. To use external module, type its path."
-            logger "3. To avoid using a module for %s, type n." (show typ)
+            builtIns <- builtInForType mEnv typ
+            logger "[%s]:" (show typ)
+            case oldModules.typedModules M.!? typ of
+              Just mod -> logger "Active: %s." mod.name
+              Nothing -> logger "No active module."
+            logger "Available built-ins: %s" (show $ (\mod -> mod.name) <$> builtIns)
+            logger "1. If you want to keep current active module, press enter."
+            logger "2. To avoid using a module, type n."
+            logger "3. To use an external module, type e."
+            logger "4. To choose a built-in module, type y or anything else."
+
             getLine >>= \case
-              [] -> do
+              "" -> do
                 logger "Keep current active module for %s." (show typ)
                 pure (fst <$> activeOnIt)
-              name | Just path <- T.pack name `lookup` (swap <$> builtIns) -> do
-                logger "Selected built-in %s for %s." name (show typ)
-                pure (Just path)
-              path -> do
-                logger "Use external module located at %s" path
-                pure (Just path)
+              "n" -> pure undefined
+              "e" -> pure undefined
+              _ -> pure undefined
           logger "Custom miscellaneous modules are not yet supported."
-          varModS $= ModuleSaved (catMaybes allTyped)
+          varModS $= modSaved{moduleSet = ModuleSetOf{typedModules = allTyped, otherModules = []}}
 
       modules <- activeModules mEnv =<< get varModS
       pkgDb <- getDatabase mEnv
