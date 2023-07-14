@@ -1,7 +1,7 @@
 cabal-version:      2.4
 name:               xmonad-manage
 -- Version *.*.*.0 is development version, and patches come after that.
-version:            0.7.1.0
+version:            0.7.1.1
 synopsis:           Xmonad profile manager
 homepage:           https://github.com/Abastro/xmonad-profiles
 license:            BSD-3-Clause

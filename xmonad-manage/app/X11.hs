@@ -39,6 +39,7 @@ loadDisplayCfg mEnv@ManageEnv{..} = loadConfig mEnv "display-config.yaml" (readY
 
 data SettingsValue = SetFlag !Bool | SetInt !Int | SetText !T.Text
 
+-- TODO Review if these are all good values.
 xresourcesCfg :: DisplayConfig -> [(T.Text, SettingsValue)]
 xresourcesCfg DisplayConfig{..} =
   [ -- Font rendering
