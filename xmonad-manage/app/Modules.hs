@@ -13,7 +13,8 @@ module Modules (
 
 import Common
 import Component
-import Control.Applicative
+import Control.Exception
+import Control.Monad
 import Data.Foldable
 import Data.Map.Strict qualified as M
 import Data.Set qualified as S
@@ -25,6 +26,7 @@ import Packages
 import System.Directory
 import System.FilePath
 import System.Process
+import System.IO
 
 -- TODO Proper builtins & More flexibility (e.g. necessary module?)
 
@@ -81,21 +83,31 @@ instance FromYAML ActiveModules where
       ModuleSetOf <$> (m .: "typed-modules") <*> (m .:? "other-modules" .!= [])
 
 loadActiveCfg :: ManageEnv -> IO (ModuleSet ModulePath)
-loadActiveCfg ManageEnv{..} =
-  readCfg <|> do
-    logger "Cannot identify the module configuration, reverting to default."
+loadActiveCfg mEnv@ManageEnv{..} =
+  catch readCfg $ \(exc :: IOException) -> do
+    logger "Cannot identify the module configuration:"
+    hPrint stderr exc
+    logger "Reverting configuration to default."
     createDirectoryIfMissing True (envPath </> "config")
     copyFile templatePath cfgPath
     logger "Trying again..."
     readCfg
   where
-    -- TODO Recognize if the actual types match
     readCfg = do
       ActiveModules{..} <- readYAMLFile userError cfgPath
-      let adjusted = activeSet{typedModules = M.insert X11 (BuiltIn "x11-xmonad") activeSet.typedModules}
+      verified <- M.traverseWithKey verifyType activeSet.typedModules
+      let adjusted = activeSet{typedModules = M.insert X11 (BuiltIn "x11-xmonad") verified}
       if requiredTypes `S.isSubsetOf` M.keysSet adjusted.typedModules
         then pure adjusted
-        else fail "Required modules are absent."
+        else fail "Required modules are absent." -- IDK, do I improve this error message?
+        -- ? How to: Parse, not validate?
+    verifyType typ modulePath = do
+      ModuleCfgOf{..} <- readModuleCfg (canonPath mEnv modulePath)
+      unless (moduleType == Just typ) $ do
+        logger "Module %s is specified for type %s, yet it has type %s." name (show typ) (show moduleType)
+        fail "Wrong module for the type."
+      pure modulePath
+
     templatePath = envPath </> "database" </> "active-modules.yaml"
     cfgPath = envPath </> "config" </> "active-modules.yaml"
 
