@@ -22,9 +22,9 @@ import Data.YAML
 import GHC.Generics
 import Manages
 import Packages
+import System.Directory
 import System.FilePath
 import System.Process
-import System.Directory
 
 -- TODO Proper builtins & More flexibility (e.g. necessary module?)
 
@@ -78,12 +78,12 @@ instance FromYAML ActiveModules where
   parseYAML :: Node Pos -> Parser ActiveModules
   parseYAML = withMap "active-modules" $ \m ->
     ActiveModules <$> do
-      ModuleSetOf <$> (m .: "typed-modules") <*> (m .: "other-modules")
+      ModuleSetOf <$> (m .: "typed-modules") <*> (m .:? "other-modules" .!= [])
 
 loadActiveCfg :: ManageEnv -> IO (ModuleSet ModulePath)
 loadActiveCfg ManageEnv{..} =
   readCfg <|> do
-    logger "Cannot identify the configuration, reverting to default."
+    logger "Cannot identify the module configuration, reverting to default."
     createDirectoryIfMissing True (envPath </> "config")
     copyFile templatePath cfgPath
     logger "Trying again..."
