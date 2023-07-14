@@ -1,0 +1,11 @@
+# [Important] Do not edit config files in database/ directory, it is to be used as a template.
+# If possible, avoid editing config files outside of the config/ directory.
+# For now, update is only applied on setup.
+
+# HiDPI Scaling; Only supports integer values.
+Scaling-Factor: 2
+
+# Theming
+Theme: "Adwaita-dark"
+Icon-Theme: "Adwaita"
+Cursor-Theme: "DMZ-White"

@@ -13,7 +13,6 @@ module Modules (
 
 import Common
 import Component
-import Control.Exception
 import Control.Monad
 import Data.Foldable
 import Data.Map.Strict qualified as M
@@ -23,14 +22,12 @@ import Data.YAML
 import GHC.Generics
 import Manages
 import Packages
-import System.Directory
 import System.FilePath
 import System.Process
-import System.IO
 
 -- TODO Proper builtins & More flexibility (e.g. necessary module?)
 
-data ModuleType = X11 | Compositor | Display | Input | PolicyKit | Keyring
+data ModuleType = Compositor | Display | Input | PolicyKit | Keyring
   deriving (Show, Eq, Ord, Enum, Bounded, Generic)
 
 instance FromYAML ModuleType where
@@ -44,7 +41,7 @@ instance FromYAML ModuleType where
     _ -> fail "invalid type"
 
 requiredTypes :: S.Set ModuleType
-requiredTypes = S.fromList [X11, Compositor, Display]
+requiredTypes = S.fromList [Compositor, Display]
 
 data ModuleMode = Start
   deriving (Show, Enum, Bounded)
@@ -83,20 +80,12 @@ instance FromYAML ActiveModules where
       ModuleSetOf <$> (m .: "typed-modules") <*> (m .:? "other-modules" .!= [])
 
 loadActiveCfg :: ManageEnv -> IO (ModuleSet ModulePath)
-loadActiveCfg mEnv@ManageEnv{..} =
-  catch readCfg $ \(exc :: IOException) -> do
-    logger "Cannot identify the module configuration:"
-    hPrint stderr exc
-    logger "Reverting configuration to default."
-    createDirectoryIfMissing True (envPath </> "config")
-    copyFile templatePath cfgPath
-    logger "Trying again..."
-    readCfg
+loadActiveCfg mEnv@ManageEnv{..} = loadConfig mEnv "active-modules.yaml" readCfg
   where
-    readCfg = do
-      ActiveModules{..} <- readYAMLFile userError cfgPath
+    readCfg path = do
+      ActiveModules{..} <- readYAMLFile userError path
       verified <- M.traverseWithKey verifyType activeSet.typedModules
-      let adjusted = activeSet{typedModules = M.insert X11 (BuiltIn "x11-xmonad") verified}
+      let adjusted = activeSet{typedModules = verified}
       if requiredTypes `S.isSubsetOf` M.keysSet adjusted.typedModules
         then pure adjusted
         else fail "Required modules are absent." -- IDK, do I improve this error message?
@@ -108,9 +97,6 @@ loadActiveCfg mEnv@ManageEnv{..} =
         fail "Wrong module for the type."
       pure modulePath
 
-    templatePath = envPath </> "database" </> "active-modules.yaml"
-    cfgPath = envPath </> "config" </> "active-modules.yaml"
-
 canonPath :: ManageEnv -> ModulePath -> FilePath
 canonPath ManageEnv{..} = \case
   BuiltIn ident -> envPath </> "modules" </> ident
@@ -119,9 +105,11 @@ canonPath ManageEnv{..} = \case
 activeModuleData :: ManageEnv -> ModuleSet ModulePath -> IO (ModuleSet ModuleCfg)
 activeModuleData mEnv = traverse (readModuleCfg . canonPath mEnv)
 
--- | Load all active modules.
-activeModules :: ManageEnv -> ModuleSet ModulePath -> IO [Component ModuleMode]
-activeModules mEnv moduleSet = toList <$> traverse (loadModule . canonPath mEnv) moduleSet
+-- | Load all active modules. Takes X11 module as a parameter.
+activeModules :: ManageEnv -> Component ModuleMode -> ModuleSet ModulePath -> IO [Component ModuleMode]
+activeModules mEnv x11Module moduleSet = do
+  loaded <- traverse (loadModule . canonPath mEnv) moduleSet
+  pure (x11Module : toList loaded)
 
 data ModuleCfg = ModuleCfgOf
   { moduleType :: !(Maybe ModuleType)

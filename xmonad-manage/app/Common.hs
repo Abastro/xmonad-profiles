@@ -152,7 +152,6 @@ data ShellStrElem = Str !T.Text | Var !T.Text
 --
 -- >>> parseShellString (T.pack "Hello, ${NAME}! ${GREETINGS}.")
 -- MkShellStr [Str "Hello, ",Var "NAME",Str "! ",Var "GREETINGS",Str "."]
---
 parseShellString :: (MonadFail m) => String -> T.Text -> m ShellString
 parseShellString name txt = case P.parse shellStr name txt of
   Left err -> fail (show err)

@@ -21,6 +21,7 @@ executable xmonad-manage
     Component
     Modules
     Profile
+    X11
   default-extensions:
     LambdaCase
     RecordWildCards

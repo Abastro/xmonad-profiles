@@ -19,6 +19,7 @@ import System.Exit
 import System.IO
 import System.Process
 import Text.Printf
+import X11
 
 -- * Fetches from separate configuration directory for each profile.
 
@@ -117,7 +118,7 @@ handleOption mEnv@ManageEnv{..} profiles = \case
     logger "Proceed? (Ctrl+C to cancel)"
     _ <- getLine
 
-    modules <- activeModules mEnv activeCfg
+    modules <- activeModules mEnv x11Module activeCfg
     pkgDb <- getDatabase mEnv
     distro <- findDistro mEnv
     install mEnv pkgDb distro installCond (mconcat modules)
@@ -158,7 +159,7 @@ handleOption mEnv@ManageEnv{..} profiles = \case
   -- Automatic profile run
   RunProf profID -> region "Setup" "Exit" $ withProfPath profID $ \cfgPath -> do
     withCurrentDirectory home $ do
-      modules <- activeModules mEnv =<< loadActiveCfg mEnv
+      modules <- activeModules mEnv x11Module =<< loadActiveCfg mEnv
       invoke mEnv Start (mconcat modules)
       logger "Booting xmonad..."
       (profile, _) <- loadProfile mEnv cfgPath

@@ -2,6 +2,7 @@
 
 ## master
 - Active modules are now based on configurations.
+- X11 display configurations could be configured via `display-config.yaml`.
 
 ## 0.7.0
 - Now depends on systemd; profiles operate via service files.
