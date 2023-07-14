@@ -7,11 +7,7 @@ import Component
 import Control.Exception
 import Data.Foldable
 import Data.Map.Strict qualified as M
-import Data.Maybe
 import Data.StateVar
-import Data.Text qualified as T
-import Data.Traversable
-import Data.Tuple
 import Manages
 import Modules
 import Options.Applicative qualified as Opts
@@ -93,146 +89,112 @@ manageOpts =
             <> Opts.help "Run installation regardless of whether it was installed or not."
         )
 
+handleOption :: ManageEnv -> M.Map ID FilePath -> Action -> IO ()
+handleOption mEnv@ManageEnv{..} profiles = \case
+  Update -> region "Updating..." "Updated." $ withCurrentDirectory envPath $ do
+    callProcess
+      "cabal"
+      [ "install"
+      , "exe:xmonad-manage"
+      , "--overwrite-policy=always"
+      , "--disable-executable-dynamic"
+      , "--install-method=copy"
+      ]
+    -- In case it is updated, need to reset!
+    -- TODO Copy to /opt/bin directory for running without depending on a user
+    get varMS
+
+  -- Resets the save if corrupted
+  ResetSave -> do
+    logger "*** Resetting save, data could be lost! ***"
+    restoreMS
+    logger "Save reset."
+
+  -- Main installation
+  Setup installCond -> beginEnd $ do
+    activeCfg <- loadActiveCfg mEnv
+
+    logger "Active modules to install:"
+    activeModuleData mEnv activeCfg >>= printActive
+    logger "Proceed? (Ctrl+C to cancel)"
+    _ <- getLine
+
+    modules <- activeModules mEnv activeCfg
+    pkgDb <- getDatabase mEnv
+    distro <- findDistro mEnv
+    install mEnv pkgDb distro installCond (mconcat modules)
+
+  -- Lists installed profiles
+  ListProf -> do
+    logger "Available profiles:"
+    for_ (M.elems profiles) $ \cfgPath -> do
+      ProfileCfg{..} <- readProfileCfg cfgPath
+      printf "- %s (%s)\n" (idStr profileID) profileProps.profileName
+      printf "    Config at: %s\n" cfgPath
+      printf "    %s\n" profileProps.profileDetails
+
+  -- Profile-specific installation
+  InstallProf rawPath installCond -> beginEnd $ do
+    cfgPath <- canonicalizePath rawPath
+    pkgDb <- getDatabase mEnv
+    distro <- findDistro mEnv
+    (profile, ident) <- loadProfile mEnv cfgPath
+    install mEnv pkgDb distro installCond profile
+    let addProfile = M.insert ident cfgPath
+    varMS $~ \saved@ManageSaved{profiles} -> saved{profiles = addProfile profiles}
+
+  -- Remove a profile
+  RemoveProf ident -> beginEnd $ do
+    cfgPath <- getProfile ident
+    -- Does not care about profile's own ID
+    (profile, _) <- loadProfile mEnv cfgPath
+    remove mEnv profile
+    let rmProfile = M.delete ident
+    varMS $~ \saved@ManageSaved{profiles} -> saved{profiles = rmProfile profiles}
+
+  -- Manually build profile
+  BuildProf profID -> beginEnd $ withProfPath profID $ \cfgPath -> do
+    (profile, _) <- loadProfile mEnv cfgPath
+    invoke mEnv BuildMode profile
+
+  -- Automatic profile run
+  RunProf profID -> region "Setup" "Exit" $ withProfPath profID $ \cfgPath -> do
+    withCurrentDirectory home $ do
+      modules <- activeModules mEnv =<< loadActiveCfg mEnv
+      invoke mEnv Start (mconcat modules)
+      logger "Booting xmonad..."
+      (profile, _) <- loadProfile mEnv cfgPath
+      invoke mEnv RunMode profile
+  where
+    getProfile profID =
+      maybe (throwIO $ ProfileNotFound profID) pure $ profiles M.!? profID
+
+    region :: String -> String -> IO a -> IO ()
+    region enter exit act = logger enter *> act *> logger exit
+    beginEnd = region "Begin" "End"
+
+    withProfPath profID act = case profiles M.!? profID of
+      Nothing -> throwIO (ProfileNotFound profID)
+      Just profilePath -> act profilePath
+
+    printActive :: ModuleSet ModuleCfg -> IO ()
+    printActive modules = do
+      for_ [minBound .. maxBound] $ \typ -> do
+        case modules.typedModules M.!? typ of
+          Just mod -> logger "%s: %s" (show typ) mod.name
+          Nothing -> logger "%s: None" (show typ)
+      logger "Others: %s" $ show $ (\mod -> mod.name) <$> modules.otherModules
+
 -- | The manager program. Current directory needs to be the profile main directory.
 main :: IO ()
 main = (`catch` handleError) $ do
-  -- For consistent line buffering
-  hSetBuffering stdout LineBuffering
-
+  hSetBuffering stdout LineBuffering -- For consistent line buffering
   cmdLine <- unwords <$> getArgs
   home <- getHomeDirectory
   ManageSaved{managePath = envPath, profiles} <- get varMS
   let logger str = printf (printf "[%s] %s\n" cmdLine str)
       mEnv = ManageEnv{envPath, home, logger}
-      getProfile profID =
-        maybe (throwIO $ ProfileNotFound profID) pure $ profiles M.!? profID
-      (varModS, restoreModS) = mkVarModule mEnv
-
-  Opts.customExecParser optPrefs manageOpts >>= \case
-    -- Updates xmonad-manage
-    Update -> do
-      logger "Updating..."
-      _ <- withCurrentDirectory envPath $ do
-        callProcess
-          "cabal"
-          [ "install"
-          , "exe:xmonad-manage"
-          , "--overwrite-policy=always"
-          , "--disable-executable-dynamic"
-          , "--install-method=copy"
-          ]
-        -- In case it is updated, need to reset!
-        get varMS
-        get varModS
-      -- TODO Copy to /opt/bin directory for running without depending on a user
-      logger "Updated."
-
-    -- Resets the save if corrupted
-    ResetSave -> do
-      logger "*** Resetting save, data could be lost! ***"
-      restoreMS
-      restoreModS
-      logger "Save reset."
-
-    -- Main installation
-    Setup installCond -> do
-      logger "Begin"
-
-      -- ? Need to improve UIs, how? Use separate config for this ?
-      logger "Setting up modules..."
-      modSaved <- get varModS
-      oldModules <- activeModuleCfgs mEnv modSaved
-
-      logger "Current modules:"
-      for_ [minBound .. maxBound] $ \typ -> do
-        case oldModules.typedModules M.!? typ of
-          Just mod -> logger "%s: %s" typ mod.name
-          Nothing -> logger "%s: None" typ
-      logger "Extras: %s" $ (\mod -> mod.name) <$> oldModules.otherModules
-      logger "Press enter to keep current active modules, or anything else to proceed with specification."
-
-      getLine >>= \case
-        [] -> logger "Proceeding with currently active modules..."
-        _ -> do
-          allTyped <- for [minBound .. maxBound] $ \typ -> do
-            builtIns <- builtInForType mEnv typ
-            logger "[%s]:" (show typ)
-            case oldModules.typedModules M.!? typ of
-              Just mod -> logger "Active: %s." mod.name
-              Nothing -> logger "No active module."
-            logger "Available built-ins: %s" (show $ (\mod -> mod.name) <$> builtIns)
-            logger "1. If you want to keep current active module, press enter."
-            logger "2. To avoid using a module, type n."
-            logger "3. To use an external module, type e."
-            logger "4. To choose a built-in module, type y or anything else."
-
-            getLine >>= \case
-              "" -> do
-                logger "Keep current active module for %s." (show typ)
-                pure (fst <$> activeOnIt)
-              "n" -> pure undefined
-              "e" -> pure undefined
-              _ -> pure undefined
-          logger "Custom miscellaneous modules are not yet supported."
-          varModS $= modSaved{moduleSet = ModuleSetOf{typedModules = allTyped, otherModules = []}}
-
-      modules <- activeModules mEnv =<< get varModS
-      pkgDb <- getDatabase mEnv
-      distro <- findDistro mEnv
-      install mEnv pkgDb distro installCond (mconcat modules)
-      logger "End"
-
-    -- Lists installed profiles
-    ListProf -> do
-      logger "Available profiles:"
-      for_ (M.elems profiles) $ \cfgPath -> do
-        ProfileCfg{..} <- readProfileCfg cfgPath
-        printf "- %s (%s)\n" (idStr profileID) profileProps.profileName
-        printf "    Config at: %s\n" cfgPath
-        printf "    %s\n" profileProps.profileDetails
-
-    -- Profile-specific installation
-    InstallProf rawPath installCond -> do
-      cfgPath <- canonicalizePath rawPath
-      logger "Begin"
-      pkgDb <- getDatabase mEnv
-      distro <- findDistro mEnv
-      (profile, ident) <- loadProfile mEnv cfgPath
-      install mEnv pkgDb distro installCond profile
-      let addProfile = M.insert ident cfgPath
-      varMS $~ \saved@ManageSaved{profiles} -> saved{profiles = addProfile profiles}
-      logger "End"
-
-    -- Remove a profile
-    RemoveProf ident -> do
-      cfgPath <- getProfile ident
-      logger "Begin"
-      -- Does not care about profile's own ID
-      (profile, _) <- loadProfile mEnv cfgPath
-      remove mEnv profile
-      let rmProfile = M.delete ident
-      varMS $~ \saved@ManageSaved{profiles} -> saved{profiles = rmProfile profiles}
-      logger "End"
-
-    -- Manually build profile
-    BuildProf profID -> do
-      cfgPath <- getProfile profID
-      logger "Begin"
-      (profile, _) <- loadProfile mEnv cfgPath
-      invoke mEnv BuildMode profile
-      logger "End"
-
-    -- Automatic profile run
-    RunProf profID -> do
-      cfgPath <- getProfile profID
-      withCurrentDirectory home $ do
-        logger "Setup"
-        modules <- activeModules mEnv =<< get varModS
-        invoke mEnv Start (mconcat modules)
-        logger "Booting xmonad..."
-        (profile, _) <- loadProfile mEnv cfgPath
-        invoke mEnv RunMode profile
-        logger "Exit"
+  Opts.customExecParser optPrefs manageOpts >>= handleOption mEnv profiles
   where
     -- MAYBE Do these need to be here?
     handleError = \case

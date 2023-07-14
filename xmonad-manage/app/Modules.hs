@@ -1,23 +1,22 @@
 {-# LANGUAGE OverloadedStrings #-}
 
 module Modules (
-  ModuleSaved (..),
   ModuleType (..),
   ModuleMode (..),
+  ModulePath (..),
   ModuleSet (..),
   ModuleCfg (..),
-  mkVarModule,
-  builtInForType,
-  activeModuleCfgs,
+  loadActiveCfg,
+  activeModuleData,
   activeModules,
 ) where
 
 import Common
 import Component
+import Control.Applicative
 import Data.Foldable
 import Data.Map.Strict qualified as M
-import Data.Serialize (Serialize)
-import Data.StateVar
+import Data.Set qualified as S
 import Data.Text qualified as T
 import Data.YAML
 import GHC.Generics
@@ -25,32 +24,28 @@ import Manages
 import Packages
 import System.FilePath
 import System.Process
+import System.Directory
 
-builtInModules :: M.Map ModuleType [String]
-builtInModules =
-  M.fromList
-    [ (X11, ["x11-xmonad"])
-    , (Compositor, ["compositor-picom"])
-    , (Display, ["display-lightdm", "display-sddm"])
-    , (PolicyKit, ["policykit-gnome", "policykit-kde"])
-    , (Keyring, ["keyring-gnome"])
-    , (Input, ["input-ibus"])
-    ]
-
--- TODO Find a way to use Built-in modules appropriately
--- TODO More flexibility (e.g. necessary module?)
--- TODO Migrating to DB with direct-sqlite, and then enable proper upgrading.
+-- TODO Proper builtins & More flexibility (e.g. necessary module?)
 
 data ModuleType = X11 | Compositor | Display | Input | PolicyKit | Keyring
   deriving (Show, Eq, Ord, Enum, Bounded, Generic)
 
+instance FromYAML ModuleType where
+  parseYAML :: Node Pos -> Parser ModuleType
+  parseYAML = withStr "type" $ \case
+    "compositor" -> pure Compositor
+    "display" -> pure Display
+    "input" -> pure Input
+    "policykit" -> pure PolicyKit
+    "keyring" -> pure Keyring
+    _ -> fail "invalid type"
+
+requiredTypes :: S.Set ModuleType
+requiredTypes = S.fromList [X11, Compositor, Display]
+
 data ModuleMode = Start
   deriving (Show, Enum, Bounded)
-
--- | Whether a module is required for a type.
--- Only used for nwe configuration as one may preserve existing setup.
-data RequiredType = Fixed | Required | Optional
-  deriving (Show)
 
 data ModulePath = BuiltIn String | External FilePath
   deriving (Show, Generic)
@@ -65,45 +60,56 @@ data ModuleSet a = ModuleSetOf
   }
   deriving (Show, Functor, Foldable, Traversable, Generic)
 
-instance Serialize ModuleType
-instance Serialize ModulePath
-instance (Serialize a) => Serialize (ModuleSet a)
-
--- | Save data for modules.
-newtype ModuleSaved = ModuleSaved
-  { moduleSet :: ModuleSet ModulePath
+-- | Denotes the module configuration.
+newtype ActiveModules = ActiveModules
+  { activeSet :: ModuleSet ModulePath
   }
-  deriving (Show, Generic)
+  deriving (Show)
 
-instance Serialize ModuleSaved
+instance FromYAML ModulePath where
+  parseYAML :: Node Pos -> Parser ModulePath
+  parseYAML = withStr "module-path" $ \case
+    txt
+      | Just ident <- T.stripPrefix "builtin:" txt -> pure $ BuiltIn (T.unpack ident)
+      | Just path <- T.stripPrefix "external:" txt -> pure $ External (T.unpack path)
+    _ -> fail "Invalid module path, need either 'builtin:' or 'external:' as prefix."
 
-mkVarModule :: ManageEnv -> (StateVar ModuleSaved, IO ())
-mkVarModule _mEnv@ManageEnv{..} = dataVar "xmonad-manage" "active-modules" $ do
-  logger "Cannot load active modules, restored to default. Please run setup."
-  pure . ModuleSaved $ ModuleSetOf{typedModules = defModules, otherModules = []}
+instance FromYAML ActiveModules where
+  parseYAML :: Node Pos -> Parser ActiveModules
+  parseYAML = withMap "active-modules" $ \m ->
+    ActiveModules <$> do
+      ModuleSetOf <$> (m .: "typed-modules") <*> (m .: "other-modules")
+
+loadActiveCfg :: ManageEnv -> IO (ModuleSet ModulePath)
+loadActiveCfg ManageEnv{..} =
+  readCfg <|> do
+    logger "Cannot identify the configuration, reverting to default."
+    createDirectoryIfMissing True (envPath </> "config")
+    copyFile templatePath cfgPath
+    logger "Trying again..."
+    readCfg
   where
-    defModules = M.mapMaybe selectFst builtInModules
-    selectFst = \case
-      [] -> Nothing
-      name : _ -> Just (BuiltIn name)
+    -- TODO Recognize if the actual types match
+    readCfg = do
+      ActiveModules{..} <- readYAMLFile userError cfgPath
+      let adjusted = activeSet{typedModules = M.insert X11 (BuiltIn "x11-xmonad") activeSet.typedModules}
+      if requiredTypes `S.isSubsetOf` M.keysSet adjusted.typedModules
+        then pure adjusted
+        else fail "Required modules are absent."
+    templatePath = envPath </> "database" </> "active-modules.yaml"
+    cfgPath = envPath </> "config" </> "active-modules.yaml"
 
 canonPath :: ManageEnv -> ModulePath -> FilePath
 canonPath ManageEnv{..} = \case
   BuiltIn ident -> envPath </> "modules" </> ident
   External path -> path
 
-moduleCfgs :: (Traversable t) => ManageEnv -> t ModulePath -> IO (t ModuleCfg)
-moduleCfgs mEnv = traverse (readModuleCfg . canonPath mEnv)
-
-builtInForType :: ManageEnv -> ModuleType -> IO [ModuleCfg]
-builtInForType mEnv moduleType = moduleCfgs mEnv (BuiltIn <$> builtInModules M.! moduleType)
-
-activeModuleCfgs :: ManageEnv -> ModuleSaved -> IO (ModuleSet ModuleCfg)
-activeModuleCfgs mEnv saved = moduleCfgs mEnv saved.moduleSet
+activeModuleData :: ManageEnv -> ModuleSet ModulePath -> IO (ModuleSet ModuleCfg)
+activeModuleData mEnv = traverse (readModuleCfg . canonPath mEnv)
 
 -- | Load all active modules.
-activeModules :: ManageEnv -> ModuleSaved -> IO [Component ModuleMode]
-activeModules mEnv saved = toList <$> traverse (loadModule . canonPath mEnv) saved.moduleSet
+activeModules :: ManageEnv -> ModuleSet ModulePath -> IO [Component ModuleMode]
+activeModules mEnv moduleSet = toList <$> traverse (loadModule . canonPath mEnv) moduleSet
 
 data ModuleCfg = ModuleCfgOf
   { moduleType :: !(Maybe ModuleType)
@@ -114,16 +120,6 @@ data ModuleCfg = ModuleCfgOf
   , dependencies :: [Package] -- Not worth pulling in vector just for this
   }
   deriving (Show)
-
-instance FromYAML ModuleType where
-  parseYAML :: Node Pos -> Parser ModuleType
-  parseYAML = withStr "type" $ \case
-    "compositor" -> pure Compositor
-    "display" -> pure Display
-    "input" -> pure Input
-    "policykit" -> pure PolicyKit
-    "keyring" -> pure Keyring
-    _ -> fail "invalid type"
 
 instance FromYAML ModuleCfg where
   parseYAML :: Node Pos -> Parser ModuleCfg

@@ -1,0 +1,18 @@
+# [Important] Do not edit config files in database/ directory, it is to be used as a template.
+# If possible, avoid editing config files outside of the config/ directory.
+
+# Modules to activate.
+# For external modules, use "external:{filepath}".
+# To avoid using a module for specific type other than compositor and display, comment out the corresponding line.
+# You can check built-in modules in the modules folder.
+# (NOTE: X11-xmonad is for internal use only)
+typed-modules:
+  compositor: "builtin:compositor-picom"
+  # Display manager
+  display: "builtin:display-lightdm"
+  policykit: "builtin:policykit-gnome"
+  keyring: "builtin:keyring-gnome"
+  input: "builtin:input-ibus"
+
+# Other, miscellaneous modules.
+other-modules:
