@@ -8,7 +8,6 @@ module Modules (
   moduleInfos,
   activeModules,
   loadModule,
-  x11ModuleAt,
 ) where
 
 import Common
@@ -23,7 +22,6 @@ import Data.YAML
 import GHC.Generics
 import Manages
 import Packages
-import System.Directory
 import System.FilePath
 import System.Process
 
@@ -44,6 +42,8 @@ builtInModules ManageEnv{..} =
 
 -- TODO Find a way to use Built-in modules appropriately
 -- TODO More flexibility (e.g. necessary module?)
+-- TODO Handle when new built-in module is added - not needed for now, but eh..
+-- Migrating to DB with direct-sqlite should be first step.
 
 data ModuleType = Compositor | Display | Input | PolicyKit | Keyring
   deriving (Show, Eq, Ord, Enum, Bounded)
@@ -143,38 +143,3 @@ setupEnvironment name environment ManageEnv{..} = \case
     forInEnv act = for_ (M.toList environment) $ \(key, str) -> do
       formatted <- shellExpand str
       act (T.unpack key) (T.unpack formatted)
-
--- TODO Use hard-coded module instead.
--- Includes XMonad.
-x11ModuleAt :: Component ModuleMode
-x11ModuleAt = deps <> xsettings <> xRandr <> xResources <> xSetRoot
-  where
-    -- Perhaps put xorg instead? But reinstalling entire xorg is not great.
-    deps = ofDependencies [AsPackage (T.pack "libxss"), AsPackage (T.pack "xmonad"), AsPackage (T.pack "xsettingsd"), AsPackage (T.pack "xsetroot")]
-    -- X settings daemon to provide settings
-    xsettings = ofHandle $ \ManageEnv{..} -> \case
-      CustomInstall -> do
-        logger "Copying xsettings.conf..."
-        -- Forgot: Need to create directory first
-        createDirectoryIfMissing True (home </> ".config" </> "xsettingsd")
-        copyFile (envPath </> "database" </> "xsettingsd.conf") (home </> ".config" </> "xsettingsd" </> "xsettingsd.conf")
-      CustomRemove -> logger "You may remove xsettings.conf in ~/.config directory."
-      InvokeOn Start -> do
-        _ <- spawnProcess "xsettingsd" []
-        pure ()
-    -- Load X resources
-    xResources = ofHandle $ \ManageEnv{..} -> \case
-      CustomInstall -> do
-        logger "Copying .Xresources..."
-        copyFile (envPath </> "database" </> ".Xresources") (home </> ".Xresources")
-      CustomRemove -> pure ()
-      InvokeOn Start -> do
-        callProcess "xrdb" ["-merge", home </> ".Xresources"]
-    -- Monitor settings use xrandr
-    xRandr = ofHandle $ \_ -> \case
-      InvokeOn Start -> callProcess "xrandr" []
-      _ -> pure ()
-    -- Set root cursor - maybe we could set other settings as well.
-    xSetRoot = ofHandle $ \_ -> \case
-      InvokeOn Start -> callProcess "xsetroot" ["-cursor_name", "left_ptr"]
-      _ -> pure ()
