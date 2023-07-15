@@ -86,35 +86,35 @@ profileDeskEntry ProfileSpec{..} startPath =
 
 -- Load profile with the ID.
 loadProfile :: ManageEnv -> FilePath -> IO (Component ProfileMode, ID)
-loadProfile ManageEnv{..} cfgDir = do
-  profileOf <$> readProfileSpec cfgDir
+loadProfile mEnv cfgDir = profileForSpec mEnv cfgDir <$> readProfileSpec cfgDir
+
+profileForSpec :: ManageEnv -> FilePath -> ProfileSpec -> (Component ProfileMode, ID)
+profileForSpec ManageEnv{..} cfgDir cfg@ProfileSpec{..} = (profile, profileID)
   where
     locFor ident str = envPath </> str </> idStr ident
     cfgFor path = cfgDir </> path
-    profileOf cfg@ProfileSpec{..} = (profile, profileID)
-      where
-        dirs =
-          MkDirectories
-            { cfgDir = cfgDir
-            , dataDir = locFor profileID "data"
-            , cacheDir = locFor profileID "cache"
-            , logDir = locFor profileID "logs"
-            }
+    dirs =
+      MkDirectories
+        { cfgDir = cfgDir
+        , dataDir = locFor profileID "data"
+        , cacheDir = locFor profileID "cache"
+        , logDir = locFor profileID "logs"
+        }
 
-        profile = deps <> prepDirectory <> prepSession <> setupEnv <> useService <> scripts <> buildOnInstall
-        deps = ofDependencies dependencies
-        scripts = fromScript executeScript (cfgFor <$> installScript) Nothing $ \case
-          BuildMode -> cfgFor buildScript
-          RunMode -> cfgFor runService
+    profile = deps <> prepDirectory <> prepSession <> setupEnv <> useService <> scripts <> buildOnInstall
+    deps = ofDependencies dependencies
+    scripts = fromScript executeScript (cfgFor <$> installScript) Nothing $ \case
+      BuildMode -> cfgFor buildScript
+      RunMode -> cfgFor runService
 
-        setupEnv = ofHandle $ setupEnvironment dirs
-        useService = ofHandle $ handleService cfg dirs
-        prepDirectory = ofHandle $ prepareDirectory dirs
-        prepSession = ofHandle $ prepareSession cfg dirs
-        -- Installation should finish with building the profile.
-        buildOnInstall = ofHandle $ \mEnv -> \case
-          CustomInstall -> invoke mEnv BuildMode profile
-          _ -> pure ()
+    setupEnv = ofHandle $ setupEnvironment dirs
+    useService = ofHandle $ handleService cfg dirs
+    prepDirectory = ofHandle $ prepareDirectory dirs
+    prepSession = ofHandle $ prepareSession cfg dirs
+    -- Installation should finish with building the profile.
+    buildOnInstall = ofHandle $ \mEnv -> \case
+      CustomInstall -> invoke mEnv BuildMode profile
+      _ -> pure ()
 
 -- | Executes the respective script, case-by-case basis since given args could be changed.
 executeScript :: ManageEnv -> FilePath -> Context ProfileMode -> IO ()

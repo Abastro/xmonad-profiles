@@ -135,16 +135,16 @@ instance FromYAML ModuleSpec where
 readModuleSpec :: FilePath -> IO ModuleSpec
 readModuleSpec moduleDir = readYAMLFile userError (moduleDir </> "module.yaml")
 
--- | Loads module as a comoponent, along with its type.
 loadModule :: FilePath -> IO (Component ModuleMode)
-loadModule moduleDir = moduleOf <$> readModuleSpec moduleDir
+loadModule moduleDir = moduleForSpec moduleDir <$> readModuleSpec moduleDir
+
+moduleForSpec :: FilePath -> ModuleSpec -> Component ModuleMode
+moduleForSpec moduleDir ModuleSpec{..} = deps <> setupEnv <> scripts
   where
+    deps = ofDependencies dependencies
+    scripts = fromScript (executeScript name) (scriptFor <$> install) Nothing (\Start -> scriptFor run)
+    setupEnv = ofHandle (setupEnvironment name environment)
     scriptFor path = moduleDir </> path
-    moduleOf ModuleSpec{..} = deps <> setupEnv <> scripts
-      where
-        deps = ofDependencies dependencies
-        scripts = fromScript (executeScript name) (scriptFor <$> install) Nothing (\Start -> scriptFor run)
-        setupEnv = ofHandle (setupEnvironment name environment)
 
 executeScript :: T.Text -> ManageEnv -> FilePath -> Context ModuleMode -> IO ()
 executeScript name ManageEnv{..} script = \case
