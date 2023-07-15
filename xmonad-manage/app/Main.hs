@@ -127,7 +127,7 @@ handleOption mEnv@ManageEnv{..} profiles = \case
   ListProf -> do
     logger "Available profiles:"
     for_ (M.elems profiles) $ \cfgPath -> do
-      ProfileCfg{..} <- readProfileCfg cfgPath
+      ProfileSpec{..} <- readProfileSpec cfgPath
       printf "- %s (%s)\n" (idStr profileID) profileProps.profileName
       printf "    Config at: %s\n" cfgPath
       printf "    %s\n" profileProps.profileDetails
@@ -176,7 +176,7 @@ handleOption mEnv@ManageEnv{..} profiles = \case
       Nothing -> throwIO (ProfileNotFound profID)
       Just profilePath -> act profilePath
 
-    printActive :: ModuleSet ModuleCfg -> IO ()
+    printActive :: ModuleSet ModuleSpec -> IO ()
     printActive modules = do
       for_ [minBound .. maxBound] $ \typ -> do
         case modules.typedModules M.!? typ of

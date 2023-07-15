@@ -5,7 +5,7 @@ module Modules (
   ModuleMode (..),
   ModulePath (..),
   ModuleSet (..),
-  ModuleCfg (..),
+  ModuleSpec (..),
   loadActiveCfg,
   activeModuleData,
   activeModules,
@@ -91,7 +91,7 @@ loadActiveCfg mEnv@ManageEnv{..} = loadConfig mEnv "active-modules.yaml" readCfg
         else fail "Required modules are absent." -- IDK, do I improve this error message?
         -- ? How to: Parse, not validate?
     verifyType typ modulePath = do
-      ModuleCfgOf{..} <- readModuleCfg (canonPath mEnv modulePath)
+      ModuleSpec{..} <- readModuleSpec (canonPath mEnv modulePath)
       unless (moduleType == Just typ) $ do
         logger "Module %s is specified for type %s, yet it has type %s." name (show typ) (show moduleType)
         fail "Wrong module for the type."
@@ -102,8 +102,8 @@ canonPath ManageEnv{..} = \case
   BuiltIn ident -> envPath </> "modules" </> ident
   External path -> path
 
-activeModuleData :: ManageEnv -> ModuleSet ModulePath -> IO (ModuleSet ModuleCfg)
-activeModuleData mEnv = traverse (readModuleCfg . canonPath mEnv)
+activeModuleData :: ManageEnv -> ModuleSet ModulePath -> IO (ModuleSet ModuleSpec)
+activeModuleData mEnv = traverse (readModuleSpec . canonPath mEnv)
 
 -- | Load all active modules. Takes X11 module as a parameter.
 activeModules :: ManageEnv -> Component ModuleMode -> ModuleSet ModulePath -> IO [Component ModuleMode]
@@ -111,7 +111,7 @@ activeModules mEnv x11Module moduleSet = do
   loaded <- traverse (loadModule . canonPath mEnv) moduleSet
   pure (x11Module : toList loaded)
 
-data ModuleCfg = ModuleCfgOf
+data ModuleSpec = ModuleSpec
   { moduleType :: !(Maybe ModuleType)
   , name :: !T.Text
   , install :: !(Maybe FilePath)
@@ -121,10 +121,10 @@ data ModuleCfg = ModuleCfgOf
   }
   deriving (Show)
 
-instance FromYAML ModuleCfg where
-  parseYAML :: Node Pos -> Parser ModuleCfg
+instance FromYAML ModuleSpec where
+  parseYAML :: Node Pos -> Parser ModuleSpec
   parseYAML = withMap "module" $ \m ->
-    ModuleCfgOf
+    ModuleSpec
       <$> (m .:! T.pack "type")
       <*> (m .: T.pack "name")
       <*> (fmap T.unpack <$> m .:! T.pack "install")
@@ -132,15 +132,15 @@ instance FromYAML ModuleCfg where
       <*> (m .:? T.pack "environment" .!= M.empty)
       <*> (m .:? T.pack "dependencies" .!= [])
 
-readModuleCfg :: FilePath -> IO ModuleCfg
-readModuleCfg moduleDir = readYAMLFile userError (moduleDir </> "module.yaml")
+readModuleSpec :: FilePath -> IO ModuleSpec
+readModuleSpec moduleDir = readYAMLFile userError (moduleDir </> "module.yaml")
 
 -- | Loads module as a comoponent, along with its type.
 loadModule :: FilePath -> IO (Component ModuleMode)
-loadModule moduleDir = moduleOf <$> readModuleCfg moduleDir
+loadModule moduleDir = moduleOf <$> readModuleSpec moduleDir
   where
     scriptFor path = moduleDir </> path
-    moduleOf ModuleCfgOf{..} = deps <> setupEnv <> scripts
+    moduleOf ModuleSpec{..} = deps <> setupEnv <> scripts
       where
         deps = ofDependencies dependencies
         scripts = fromScript (executeScript name) (scriptFor <$> install) Nothing (\Start -> scriptFor run)

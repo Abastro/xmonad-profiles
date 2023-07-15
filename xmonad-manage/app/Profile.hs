@@ -1,9 +1,9 @@
 module Profile (
   ProfileProps (..),
-  ProfileCfg (..),
+  ProfileSpec (..),
   ProfileError (..),
   ProfileMode (..),
-  readProfileCfg,
+  readProfileSpec,
   loadProfile,
 ) where
 
@@ -23,15 +23,13 @@ import System.Info (arch, os)
 import System.Process
 import Text.Printf
 
--- | Profile Properties
 data ProfileProps = ProfileProps
   { profileName :: !T.Text
   , profileDetails :: !T.Text
   }
   deriving (Show)
 
--- | Profile Config
-data ProfileCfg = ProfileCfg
+data ProfileSpec = ProfileSpec
   { profileID :: !ID
   , profileProps :: !ProfileProps
   , installScript :: !(Maybe FilePath)
@@ -41,10 +39,10 @@ data ProfileCfg = ProfileCfg
   }
   deriving (Show)
 
-instance FromYAML ProfileCfg where
-  parseYAML :: Node Pos -> Parser ProfileCfg
+instance FromYAML ProfileSpec where
+  parseYAML :: Node Pos -> Parser ProfileSpec
   parseYAML = withMap "profile" $ \m ->
-    ProfileCfg
+    ProfileSpec
       <$> (m .: T.pack "ID")
       <*> (ProfileProps <$> m .: T.pack "name" <*> m .: T.pack "details")
       <*> (fmap T.unpack <$> m .:? T.pack "install")
@@ -62,8 +60,8 @@ data ProfileError
 
 instance Exception ProfileError
 
-readProfileCfg :: FilePath -> IO ProfileCfg
-readProfileCfg cfgDir = wrapIOError cfgDir $ readYAMLFile ProfileWrongFormat (cfgDir </> "profile.yaml")
+readProfileSpec :: FilePath -> IO ProfileSpec
+readProfileSpec cfgDir = wrapIOError cfgDir $ readYAMLFile ProfileWrongFormat (cfgDir </> "profile.yaml")
 
 wrapIOError :: FilePath -> IO a -> IO a
 wrapIOError cfgDir = handle @IOError (throwIO . ProfileIOError cfgDir)
@@ -75,8 +73,8 @@ data ProfileMode = BuildMode | RunMode
 data Directories = MkDirectories {cfgDir, dataDir, cacheDir, logDir :: !FilePath}
   deriving (Show)
 
-profileDeskEntry :: ProfileCfg -> FilePath -> String
-profileDeskEntry ProfileCfg{..} startPath =
+profileDeskEntry :: ProfileSpec -> FilePath -> String
+profileDeskEntry ProfileSpec{..} startPath =
   unlines
     [ printf "[Desktop Entry]"
     , printf "Encoding=UTF-8"
@@ -89,11 +87,11 @@ profileDeskEntry ProfileCfg{..} startPath =
 -- Load profile with the ID.
 loadProfile :: ManageEnv -> FilePath -> IO (Component ProfileMode, ID)
 loadProfile ManageEnv{..} cfgDir = do
-  profileOf <$> readProfileCfg cfgDir
+  profileOf <$> readProfileSpec cfgDir
   where
     locFor ident str = envPath </> str </> idStr ident
     cfgFor path = cfgDir </> path
-    profileOf cfg@ProfileCfg{..} = (profile, profileID)
+    profileOf cfg@ProfileSpec{..} = (profile, profileID)
       where
         dirs =
           MkDirectories
@@ -161,8 +159,8 @@ prepareDirectory MkDirectories{..} ManageEnv{..} = \case
     traverse_ removePathForcibly [dataDir, cacheDir, logDir]
   InvokeOn _ -> pure ()
 
-handleService :: ProfileCfg -> Directories -> ManageEnv -> Context ProfileMode -> IO ()
-handleService ProfileCfg{..} dirs@MkDirectories{..} ManageEnv{..} = \case
+handleService :: ProfileSpec -> Directories -> ManageEnv -> Context ProfileMode -> IO ()
+handleService ProfileSpec{..} dirs@MkDirectories{..} ManageEnv{..} = \case
   CustomInstall -> do
     serviceDir <- getXdgDirectory XdgConfig "systemd"
     createDirectoryIfMissing True serviceDir
@@ -205,8 +203,8 @@ handleService ProfileCfg{..} dirs@MkDirectories{..} ManageEnv{..} = \case
       Just val -> pure (T.pack val)
       Nothing -> fail $ "Environment variable " <> envName <> " not found"
 
-prepareSession :: ProfileCfg -> Directories -> ManageEnv -> Context a -> IO ()
-prepareSession cfg@ProfileCfg{..} MkDirectories{..} ManageEnv{..} = \case
+prepareSession :: ProfileSpec -> Directories -> ManageEnv -> Context a -> IO ()
+prepareSession cfg@ProfileSpec{..} MkDirectories{..} ManageEnv{..} = \case
   CustomInstall -> do
     logger "Installing xsession runner..."
     writeFile startPath startScript
