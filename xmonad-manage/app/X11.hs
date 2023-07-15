@@ -2,7 +2,7 @@
 
 -- | X11 setup and settings.
 module X11 (
-  x11Module,
+  loadX11Module,
 ) where
 
 import Common
@@ -85,48 +85,52 @@ xsettingsText cfg = T.unlines $ do
       SetInt i -> T.pack (show i)
       SetText txt -> "\"" <> txt <> "\""
 
-x11Module :: Component ModuleMode
-x11Module = deps <> xresources <> xsettingsd <> xsetup
+loadX11Module :: IO (Component ModuleMode)
+loadX11Module = do
+  xsDir <- getXdgDirectory XdgConfig "xsettingsd"
+  pure (deps <> xresources <> xsettingsd xsDir <> xsetup)
   where
     deps = ofDependencies [AsPackage "libxss", AsPackage "xmonad", AsPackage "xsettingsd", AsPackage "xsetroot"]
-    xresources = ofHandle $ \mEnv@ManageEnv{..} -> \case
-      CustomInstall -> do
-        -- TODO getXDGDirectory?
-        logger "[X11] Installing X-resources..."
-        displayCfg <- loadDisplayCfg mEnv
-        T.writeFile (xresourcesPath home) $ xresourcesText (xresourcesCfg displayCfg)
-      CustomRemove -> do
-        logger "You may remove installed X-resources config %s." (xresourcesPath home)
-      InvokeOn Start -> do
-        logger "[X11] Reflect X-resources."
-        callProcess "xrdb" ["-merge", xresourcesPath home]
-    xresourcesPath home = home </> ".Xresources"
-
-    xsettingsd = ofHandle $ \mEnv@ManageEnv{..} -> \case
-      CustomInstall -> do
-        logger "[X11] Installing X settings..."
-        displayCfg <- loadDisplayCfg mEnv
-        -- Need to create folder first
-        xsettingsDir <- getXdgDirectory XdgConfig "xsettingsd"
-        createDirectoryIfMissing False xsettingsDir
-        T.writeFile (xsettingsDir </> "xsettingsd.conf") $ xsettingsText (xsettingsConf displayCfg)
-      --
-      CustomRemove -> do
-        xsettingsDir <- getXdgDirectory XdgConfig "xsettingsd"
-        logger "You may remove installed xsettingsd config %s." (xsettingsDir </> "xsettingsd.conf")
-      --
-      InvokeOn Start -> do
-        logger "[X11] Running XSettingsd for X settings."
-        _ <- spawnProcess "xsettingsd" []
-        -- Workaround for GTK4 apps reaching for GTK_THEME.
-        DisplayConfig{theme} <- loadDisplayCfg mEnv
-        -- ? Do we need to call dbus-update-activation-environment?
-        setServiceEnv "GTK_THEME" (T.unpack theme)
-        setServiceEnv "QT_AUTO_SCREEN_SCALE_FACTOR" "1" -- HiDPI Scales for QT
-        setServiceEnv "QT_QPA_PLATFORMTHEME" "qt5ct"
-
+    xresources = ofHandle handleXresources
+    xsettingsd xsDir = ofHandle (handleXsettings xsDir)
     xsetup = ofHandle $ \ManageEnv{..} -> \case
       InvokeOn Start -> do
         callProcess "xrandr" []
         callProcess "xsetroot" ["-cursor_name", "left_ptr"]
       _ -> pure ()
+
+handleXresources :: ManageEnv -> Context ModuleMode -> IO ()
+handleXresources mEnv@ManageEnv{..} = \case
+  CustomInstall -> do
+    logger "[X11] Installing X-resources..."
+    displayCfg <- loadDisplayCfg mEnv
+    T.writeFile (xresourcesPath home) $ xresourcesText (xresourcesCfg displayCfg)
+  CustomRemove -> do
+    logger "You may remove installed X-resources config %s." (xresourcesPath home)
+  InvokeOn Start -> do
+    logger "[X11] Reflect X-resources."
+    callProcess "xrdb" ["-merge", xresourcesPath home]
+  where
+    xresourcesPath home = home </> ".Xresources"
+
+handleXsettings :: FilePath -> ManageEnv -> Context ModuleMode -> IO ()
+handleXsettings xsettingsDir mEnv@ManageEnv{..} = \case
+  CustomInstall -> do
+    logger "[X11] Installing X settings..."
+    displayCfg <- loadDisplayCfg mEnv
+    -- Need to create folder first
+    createDirectoryIfMissing False xsettingsDir
+    T.writeFile (xsettingsDir </> "xsettingsd.conf") $ xsettingsText (xsettingsConf displayCfg)
+  --
+  CustomRemove -> do
+    logger "You may remove installed xsettingsd config %s." (xsettingsDir </> "xsettingsd.conf")
+  --
+  InvokeOn Start -> do
+    logger "[X11] Running XSettingsd for X settings."
+    _ <- spawnProcess "xsettingsd" []
+    -- Workaround for GTK4 apps reaching for GTK_THEME.
+    DisplayConfig{theme} <- loadDisplayCfg mEnv
+    -- ? Do we need to call dbus-update-activation-environment?
+    setServiceEnv "GTK_THEME" (T.unpack theme)
+    setServiceEnv "QT_AUTO_SCREEN_SCALE_FACTOR" "1" -- HiDPI Scales for QT
+    setServiceEnv "QT_QPA_PLATFORMTHEME" "qt5ct"

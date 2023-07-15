@@ -70,7 +70,7 @@ data ProfileMode = BuildMode | RunMode
   deriving (Show, Eq, Enum, Bounded)
 
 -- serviceDir is not specific to the config, but this does make things convenient.
-data Directories = MkDirectories {cfgDir, dataDir, cacheDir, logDir :: !FilePath}
+data Directories = MkDirectories {cfgDir, dataDir, cacheDir, logDir, serviceDir :: !FilePath}
   deriving (Show)
 
 profileDeskEntry :: ProfileSpec -> FilePath -> String
@@ -86,26 +86,30 @@ profileDeskEntry ProfileSpec{..} startPath =
 
 -- Load profile with the ID.
 loadProfile :: ManageEnv -> FilePath -> IO (Component ProfileMode, ID)
-loadProfile mEnv cfgDir = profileForSpec mEnv cfgDir <$> readProfileSpec cfgDir
-
-profileForSpec :: ManageEnv -> FilePath -> ProfileSpec -> (Component ProfileMode, ID)
-profileForSpec ManageEnv{..} cfgDir cfg@ProfileSpec{..} = (profile, profileID)
+loadProfile mEnv@ManageEnv{..} cfgDir = do
+  spec@ProfileSpec{profileID} <- readProfileSpec cfgDir
+  serviceDir <- getXdgDirectory XdgConfig "systemd"
+  pure $ profileForSpec mEnv (dirsOf profileID serviceDir) spec
   where
     locFor ident str = envPath </> str </> idStr ident
-    cfgFor path = cfgDir </> path
-    dirs =
+    dirsOf profileID serviceDir =
       MkDirectories
         { cfgDir = cfgDir
         , dataDir = locFor profileID "data"
         , cacheDir = locFor profileID "cache"
         , logDir = locFor profileID "logs"
+        , serviceDir
         }
 
+profileForSpec :: ManageEnv -> Directories -> ProfileSpec -> (Component ProfileMode, ID)
+profileForSpec ManageEnv{..} dirs@MkDirectories{..} cfg@ProfileSpec{..} = (profile, profileID)
+  where
     profile = deps <> prepDirectory <> prepSession <> setupEnv <> useService <> scripts <> buildOnInstall
     deps = ofDependencies dependencies
     scripts = fromScript executeScript (cfgFor <$> installScript) Nothing $ \case
       BuildMode -> cfgFor buildScript
       RunMode -> cfgFor runService
+    cfgFor path = cfgDir </> path
 
     setupEnv = ofHandle $ setupEnvironment dirs
     useService = ofHandle $ handleService cfg dirs

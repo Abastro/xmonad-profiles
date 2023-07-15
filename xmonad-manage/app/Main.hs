@@ -33,6 +33,8 @@ import X11
 -- If this were statically compiled, it would not matter, but it will take more size.
 -- ? Need analyzing dependencies - e.g. PulpMonad relies a lot on Gnome environment.
 
+-- TODO Adopt XDG Directory
+
 data Action
   = Update
   | ResetSave
@@ -118,7 +120,7 @@ handleOption mEnv@ManageEnv{..} profiles = \case
     logger "Proceed? (Ctrl+C to cancel)"
     _ <- getLine
 
-    modules <- activeModules mEnv x11Module activeCfg
+    modules <- activeModules mEnv loadX11Module activeCfg
     pkgDb <- getDatabase mEnv
     distro <- findDistro mEnv
     install mEnv pkgDb distro installCond (mconcat modules)
@@ -159,7 +161,7 @@ handleOption mEnv@ManageEnv{..} profiles = \case
   -- Automatic profile run
   RunProf profID -> region "Setup" "Exit" $ withProfPath profID $ \cfgPath -> do
     withCurrentDirectory home $ do
-      modules <- activeModules mEnv x11Module =<< loadActiveCfg mEnv
+      modules <- activeModules mEnv loadX11Module =<< loadActiveCfg mEnv
       invoke mEnv Start (mconcat modules)
       logger "Booting xmonad..."
       (profile, _) <- loadProfile mEnv cfgPath

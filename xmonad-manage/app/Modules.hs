@@ -106,9 +106,10 @@ activeModuleData :: ManageEnv -> ModuleSet ModulePath -> IO (ModuleSet ModuleSpe
 activeModuleData mEnv = traverse (readModuleSpec . canonPath mEnv)
 
 -- | Load all active modules. Takes X11 module as a parameter.
-activeModules :: ManageEnv -> Component ModuleMode -> ModuleSet ModulePath -> IO [Component ModuleMode]
-activeModules mEnv x11Module moduleSet = do
+activeModules :: ManageEnv -> IO (Component ModuleMode) -> ModuleSet ModulePath -> IO [Component ModuleMode]
+activeModules mEnv mkX11 moduleSet = do
   loaded <- traverse (loadModule . canonPath mEnv) moduleSet
+  x11Module <- mkX11
   pure (x11Module : toList loaded)
 
 data ModuleSpec = ModuleSpec
