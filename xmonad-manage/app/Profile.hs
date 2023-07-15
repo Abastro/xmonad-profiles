@@ -117,21 +117,20 @@ profileForSpec ManageEnv{..} dirs@MkDirectories{..} cfg@ProfileSpec{..} = (profi
     prepSession = ofHandle $ prepareSession cfg dirs
     -- Installation should finish with building the profile.
     buildOnInstall = ofHandle $ \mEnv -> \case
-      CustomInstall -> invoke mEnv BuildMode profile
+      Custom Install -> invoke mEnv BuildMode profile
       _ -> pure ()
 
 -- | Executes the respective script, case-by-case basis since given args could be changed.
 executeScript :: ManageEnv -> FilePath -> Context ProfileMode -> IO ()
 executeScript ManageEnv{..} script = \case
-  CustomInstall -> do
-    logger "Install using %s..." script
-    callProcess script []
-  CustomRemove -> do
-    logger "Remove using %s..." script
+  Custom phase -> do
+    case phase of
+      Install -> logger "Install using %s..." script
+      Remove -> logger "Remove using %s..." script
     callProcess script []
   InvokeOn BuildMode -> do
     -- It would be great to log to journal, but eh.. not needed anyway.
-    logger "Build using %s..." script
+    logger "Build through script %s..." script
     callProcess script []
   InvokeOn RunMode -> pure () -- Services call the scripts, instead.
 
@@ -146,8 +145,7 @@ environments MkDirectories{..} =
     ]
 
 setupEnvironment :: Directories -> ManageEnv -> Context ProfileMode -> IO ()
-setupEnvironment dirs@MkDirectories{..} ManageEnv{..} mode = do
-  for_ (M.toList $ environments dirs) (uncurry putEnv)
+setupEnvironment dirs@MkDirectories{..} ManageEnv{..} mode = for_ (M.toList $ environments dirs) (uncurry putEnv)
   where
     putEnv = case mode of
       InvokeOn RunMode -> setServiceEnv
@@ -155,30 +153,27 @@ setupEnvironment dirs@MkDirectories{..} ManageEnv{..} mode = do
 
 prepareDirectory :: Directories -> ManageEnv -> Context a -> IO ()
 prepareDirectory MkDirectories{..} ManageEnv{..} = \case
-  CustomInstall -> do
+  Custom Install -> do
     logger "Preparing profile directories..."
     traverse_ (createDirectoryIfMissing True) [dataDir, cacheDir, logDir]
-  CustomRemove -> do
+  Custom Remove -> do
     logger "Removing profile directories..."
     traverse_ removePathForcibly [dataDir, cacheDir, logDir]
   InvokeOn _ -> pure ()
 
 handleService :: ProfileSpec -> Directories -> ManageEnv -> Context ProfileMode -> IO ()
 handleService ProfileSpec{..} dirs@MkDirectories{..} ManageEnv{..} = \case
-  CustomInstall -> do
-    serviceDir <- getXdgDirectory XdgConfig "systemd"
+  Custom Install -> do
     createDirectoryIfMissing True serviceDir
   --
-  CustomRemove -> do
+  Custom Remove -> do
     logger "Removing systemd services..."
-    serviceDir <- getXdgDirectory XdgConfig "systemd"
-    traverse_ (removeService serviceDir) (runService : otherServices)
+    traverse_ removeService (runService : otherServices)
   --
   InvokeOn BuildMode -> do
     -- Install on build to allow frequent changes of services
     logger "Installing systemd services..."
-    serviceDir <- getXdgDirectory XdgConfig "systemd"
-    traverse_ (setupService serviceDir) (runService : otherServices)
+    traverse_ setupService (runService : otherServices)
     callProcess "systemctl" ["--user", "daemon-reload"]
     logger "Systemd user daemon reloaded."
   --
@@ -187,14 +182,14 @@ handleService ProfileSpec{..} dirs@MkDirectories{..} ManageEnv{..} = \case
     callProcess "systemctl" ["--user", "start", "--wait", serviceNameOf runService]
   where
     -- Setup service based on "template" at the path.
-    setupService serviceDir templatePath = do
+    setupService templatePath = do
       let serviceName = serviceNameOf templatePath
       logger "Service %s being installed." serviceName
       template <- T.readFile (cfgDir </> templatePath) >>= parseShellString serviceName
       service <- shellExpandWith (readEnv . T.unpack) template
       T.writeFile (serviceDir </> serviceName) service
 
-    removeService serviceDir templatePath = do
+    removeService templatePath = do
       let serviceName = serviceNameOf templatePath
       logger "Service %s being removed." serviceName
       removeFile (serviceDir </> serviceName)
@@ -209,14 +204,14 @@ handleService ProfileSpec{..} dirs@MkDirectories{..} ManageEnv{..} = \case
 
 prepareSession :: ProfileSpec -> Directories -> ManageEnv -> Context a -> IO ()
 prepareSession cfg@ProfileSpec{..} MkDirectories{..} ManageEnv{..} = \case
-  CustomInstall -> do
+  Custom Install -> do
     logger "Installing xsession runner..."
     writeFile startPath startScript
     setToExecutable startPath
     writeFile deskEntryPath (profileDeskEntry cfg startPath)
     -- Instead of linking, we copy the runner. Fixes issues with SDDM.
     callProcess "sudo" ["cp", "-T", deskEntryPath, sessionPath]
-  CustomRemove -> do
+  Custom Remove -> do
     logger "Removing xsession runner..."
     callProcess "sudo" ["rm", "-f", sessionPath]
   InvokeOn _ -> pure () -- Session is not something to invoke

@@ -1,4 +1,5 @@
 module Component (
+  SetupPhase (..),
   Context (..),
   Component (..),
   install,
@@ -14,7 +15,9 @@ import Data.Foldable
 import Manages
 import Packages
 
-data Context a = CustomInstall | CustomRemove | InvokeOn a
+data SetupPhase = Install | Remove
+  deriving (Show)
+data Context a = Custom SetupPhase | InvokeOn a
 
 -- | A unit of installation. Can be conveniently merged.
 -- When merged, former component is executed first.
@@ -35,7 +38,7 @@ install mEnv@ManageEnv{..} pkgDb distro cond MkComponent{..} = do
   logger "Installing dependencies.."
   installPackages mEnv pkgDb distro cond dependencies
   logger "Running custom installation process.."
-  handle mEnv CustomInstall
+  handle mEnv (Custom Install)
 
 --  * When removal is being implemented, both distro and package database is needed.
 remove :: ManageEnv -> Component a -> IO ()
@@ -43,7 +46,7 @@ remove mEnv@ManageEnv{..} MkComponent{..} = do
   logger "Removing dependencies is not yet implemented."
   logger "Packages %s was installed." (show $ packageName <$> dependencies)
   logger "Running custom removal process..."
-  handle mEnv CustomRemove
+  handle mEnv (Custom Remove)
 
 invoke :: ManageEnv -> a -> Component a -> IO ()
 invoke mEnv ctxt MkComponent{..} = do
@@ -61,16 +64,16 @@ fromScript executor installScript removeScript invokeScript =
   MkComponent
     { dependencies = []
     , handle = \mEnv -> \case
-        CustomInstall -> do
+        Custom Install -> do
           for_ installScript $ \inst -> do
             setToExecutable inst
-            executor mEnv inst CustomInstall
+            executor mEnv inst (Custom Install)
           for_ [minBound .. maxBound] $ \ctxt -> do
             setToExecutable (invokeScript ctxt)
-        CustomRemove -> do
+        Custom Remove -> do
           for_ removeScript $ \rm -> do
             setToExecutable rm
-            executor mEnv rm CustomRemove
+            executor mEnv rm (Custom Remove)
         InvokeOn ctxt -> do
           executor mEnv (invokeScript ctxt) (InvokeOn ctxt)
     }

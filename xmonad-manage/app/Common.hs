@@ -3,7 +3,6 @@
 -- | Checked stuffs.
 module Common (
   setToExecutable,
-  dataVar,
   ID,
   idStr,
   makeID,
@@ -21,20 +20,16 @@ module Common (
   shellExpand,
 ) where
 
-import Control.Applicative
 import Control.Exception
 import Control.Monad
 import Data.ByteString.Lazy qualified as B
 import Data.Char
 import Data.Coerce
 import Data.Serialize
-import Data.StateVar
 import Data.Text qualified as T
 import Data.YAML
 import System.Directory
 import System.Environment
-import System.FilePath
-import System.IO
 import System.Process
 import Text.Parsec qualified as P
 import Text.Printf
@@ -43,31 +38,6 @@ setToExecutable :: FilePath -> IO ()
 setToExecutable path = do
   perm <- getPermissions path
   setPermissions path (setOwnerExecutable True perm)
-
--- TODO Refactor
--- | Data variable stored in XDG_DATA_DIR, with an action to reset it to default.
-dataVar :: (Serialize a) => String -> String -> IO a -> (StateVar a, IO ())
-dataVar appName varName mkDef = (var, restore)
-  where
-    var = makeStateVar load save
-    restore = mkDef >>= (var $=)
-    load = do
-      msave <- datPath
-      let readAsA = withFile msave ReadMode (evaluate <=< fmap decodeLazy . B.hGetContents)
-      readAsA <|> pure (Left "") >>= \case
-        Right saved -> pure saved
-        Left _ -> do
-          defVal <- mkDef
-          defVal <$ B.writeFile msave (encodeLazy defVal)
-    save saved = do
-      msave <- datPath
-      B.writeFile msave (encodeLazy saved)
-
-    datPath = do
-      dataDir <- getXdgDirectory XdgData appName
-      createDirectoryIfMissing True dataDir
-      (dataDir </> varName) <$ setPermissions dataDir perm
-    perm = setOwnerSearchable True . setOwnerReadable True . setOwnerWritable True $ emptyPermissions
 
 -- | Denotes ID, made of ASCII letters w/o space
 newtype ID = ID String deriving newtype (Show, Eq, Ord, Serialize)

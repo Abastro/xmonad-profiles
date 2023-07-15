@@ -108,8 +108,8 @@ activeModuleData mEnv = traverse (readModuleSpec . canonPath mEnv)
 -- | Load all active modules. Takes X11 module as a parameter.
 activeModules :: ManageEnv -> IO (Component ModuleMode) -> ModuleSet ModulePath -> IO [Component ModuleMode]
 activeModules mEnv mkX11 moduleSet = do
-  loaded <- traverse (loadModule . canonPath mEnv) moduleSet
   x11Module <- mkX11
+  loaded <- traverse (loadModule . canonPath mEnv) moduleSet
   pure (x11Module : toList loaded)
 
 data ModuleSpec = ModuleSpec
@@ -149,10 +149,10 @@ moduleForSpec moduleDir ModuleSpec{..} = deps <> setupEnv <> scripts
 
 executeScript :: T.Text -> ManageEnv -> FilePath -> Context ModuleMode -> IO ()
 executeScript name ManageEnv{..} script = \case
-  CustomInstall -> do
+  Custom Install -> do
     logger "[%s] Module installation using %s..." name script
     callProcess script []
-  CustomRemove -> pure ()
+  Custom Remove -> pure ()
   InvokeOn Start -> do
     logger "[%s] Setting up using %s..." name script
     callProcess script []
@@ -160,10 +160,10 @@ executeScript name ManageEnv{..} script = \case
 
 setupEnvironment :: T.Text -> M.Map T.Text ShellString -> ManageEnv -> Context ModuleMode -> IO ()
 setupEnvironment name environment ManageEnv{..} = \case
-  CustomInstall -> do
+  Custom Install -> do
     logger "[%s] Checking shell expansions..." name
     forInEnv (logger "[Env] %s=%s")
-  CustomRemove -> pure ()
+  Custom Remove -> pure ()
   InvokeOn Start -> do
     logger "[%s] Setting up..." name
     forInEnv setServiceEnv

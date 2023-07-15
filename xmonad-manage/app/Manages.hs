@@ -8,9 +8,12 @@ module Manages (
 where
 
 import Common
+import Control.Applicative
 import Control.Exception
+import Control.Monad
+import Data.ByteString.Lazy qualified as B
 import Data.Map.Strict qualified as M
-import Data.Serialize (Serialize)
+import Data.Serialize
 import Data.StateVar
 import GHC.Generics (Generic)
 import System.Directory
@@ -43,6 +46,30 @@ mkMS = do
 varMS :: StateVar ManageSaved
 restoreMS :: IO ()
 (varMS, restoreMS) = dataVar "xmonad-manage" "manage-data" mkMS
+
+-- | Data variable stored in XDG_DATA_DIR, with an action to reset it to default.
+dataVar :: (Serialize a) => String -> String -> IO a -> (StateVar a, IO ())
+dataVar appName varName mkDef = (var, restore)
+  where
+    var = makeStateVar load save
+    restore = mkDef >>= (var $=)
+    load = do
+      msave <- datPath
+      let readAsA = withFile msave ReadMode (evaluate <=< fmap decodeLazy . B.hGetContents)
+      readAsA <|> pure (Left "") >>= \case
+        Right saved -> pure saved
+        Left _ -> do
+          defVal <- mkDef
+          defVal <$ B.writeFile msave (encodeLazy defVal)
+    save saved = do
+      msave <- datPath
+      B.writeFile msave (encodeLazy saved)
+
+    datPath = do
+      dataDir <- getXdgDirectory XdgData appName
+      createDirectoryIfMissing True dataDir
+      (dataDir </> varName) <$ setPermissions dataDir perm
+    perm = setOwnerSearchable True . setOwnerReadable True . setOwnerWritable True $ emptyPermissions
 
 -- | Loads configuration from /config folder, and copies the template if it fails.
 loadConfig :: ManageEnv -> String -> (FilePath -> IO a) -> IO a

@@ -81,7 +81,7 @@ xsettingsText cfg = T.unlines $ do
   pure $ field <> " " <> valueAsText value
   where
     valueAsText = \case
-      SetFlag flag -> T.pack (show flag)
+      SetFlag flag -> T.pack (show $ fromEnum flag)
       SetInt i -> T.pack (show i)
       SetText txt -> "\"" <> txt <> "\""
 
@@ -101,11 +101,11 @@ loadX11Module = do
 
 handleXresources :: ManageEnv -> Context ModuleMode -> IO ()
 handleXresources mEnv@ManageEnv{..} = \case
-  CustomInstall -> do
+  Custom Install -> do
     logger "[X11] Installing X-resources..."
     displayCfg <- loadDisplayCfg mEnv
     T.writeFile (xresourcesPath home) $ xresourcesText (xresourcesCfg displayCfg)
-  CustomRemove -> do
+  Custom Remove -> do
     logger "You may remove installed X-resources config %s." (xresourcesPath home)
   InvokeOn Start -> do
     logger "[X11] Reflect X-resources."
@@ -115,14 +115,14 @@ handleXresources mEnv@ManageEnv{..} = \case
 
 handleXsettings :: FilePath -> ManageEnv -> Context ModuleMode -> IO ()
 handleXsettings xsettingsDir mEnv@ManageEnv{..} = \case
-  CustomInstall -> do
+  Custom Install -> do
     logger "[X11] Installing X settings..."
     displayCfg <- loadDisplayCfg mEnv
     -- Need to create folder first
     createDirectoryIfMissing False xsettingsDir
     T.writeFile (xsettingsDir </> "xsettingsd.conf") $ xsettingsText (xsettingsConf displayCfg)
   --
-  CustomRemove -> do
+  Custom Remove -> do
     logger "You may remove installed xsettingsd config %s." (xsettingsDir </> "xsettingsd.conf")
   --
   InvokeOn Start -> do
