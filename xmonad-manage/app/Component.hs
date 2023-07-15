@@ -16,7 +16,7 @@ import Manages
 import Packages
 
 data SetupPhase = Install | Remove
-  deriving (Show)
+  deriving (Eq, Show, Enum, Bounded)
 data Context a = Custom SetupPhase | InvokeOn a
 
 -- | A unit of installation. Can be conveniently merged.
@@ -56,27 +56,19 @@ invoke mEnv ctxt MkComponent{..} = do
 fromScript ::
   (Enum a, Bounded a) =>
   (ManageEnv -> FilePath -> Context a -> IO ()) ->
-  Maybe FilePath ->
-  Maybe FilePath ->
+  (SetupPhase -> Maybe FilePath) ->
   (a -> FilePath) ->
   Component a
-fromScript executor installScript removeScript invokeScript =
-  MkComponent
-    { dependencies = []
-    , handle = \mEnv -> \case
-        Custom Install -> do
-          for_ installScript $ \inst -> do
-            setToExecutable inst
-            executor mEnv inst (Custom Install)
-          for_ [minBound .. maxBound] $ \ctxt -> do
-            setToExecutable (invokeScript ctxt)
-        Custom Remove -> do
-          for_ removeScript $ \rm -> do
-            setToExecutable rm
-            executor mEnv rm (Custom Remove)
-        InvokeOn ctxt -> do
-          executor mEnv (invokeScript ctxt) (InvokeOn ctxt)
-    }
+fromScript executor setupScripts invokeScripts = ofHandle $ \mEnv -> \case
+  Custom phase -> do
+    case phase of
+      Install -> for_ [minBound .. maxBound] $ \ctxt -> setToExecutable (invokeScripts ctxt)
+      Remove -> pure ()
+    for_ (setupScripts phase) $ \setup -> do
+      setToExecutable setup
+      executor mEnv setup (Custom Install)
+  InvokeOn ctxt -> do
+    executor mEnv (invokeScripts ctxt) (InvokeOn ctxt)
 
 ofHandle :: (ManageEnv -> Context a -> IO ()) -> Component a
 ofHandle handle = MkComponent{dependencies = [], handle}

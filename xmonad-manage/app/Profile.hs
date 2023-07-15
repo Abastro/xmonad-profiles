@@ -106,9 +106,17 @@ profileForSpec ManageEnv{..} dirs@MkDirectories{..} cfg@ProfileSpec{..} = (profi
   where
     profile = deps <> prepDirectory <> prepSession <> setupEnv <> useService <> scripts <> buildOnInstall
     deps = ofDependencies dependencies
-    scripts = fromScript executeScript (cfgFor <$> installScript) Nothing $ \case
-      BuildMode -> cfgFor buildScript
-      RunMode -> cfgFor runService
+    scripts =
+      fromScript
+        executeScript
+        ( \case
+            Install -> cfgFor <$> installScript
+            Remove -> Nothing
+        )
+        ( \case
+            BuildMode -> cfgFor buildScript
+            RunMode -> cfgFor runService
+        )
     cfgFor path = cfgDir </> path
 
     setupEnv = ofHandle $ setupEnvironment dirs

@@ -143,7 +143,14 @@ moduleForSpec :: FilePath -> ModuleSpec -> Component ModuleMode
 moduleForSpec moduleDir ModuleSpec{..} = deps <> setupEnv <> scripts
   where
     deps = ofDependencies dependencies
-    scripts = fromScript (executeScript name) (scriptFor <$> install) Nothing (\Start -> scriptFor run)
+    scripts =
+      fromScript
+        (executeScript name)
+        ( \case
+            Install -> scriptFor <$> install
+            Remove -> Nothing
+        )
+        (\Start -> scriptFor run)
     setupEnv = ofHandle (setupEnvironment name environment)
     scriptFor path = moduleDir </> path
 
