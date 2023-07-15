@@ -71,6 +71,7 @@ wrapIOError cfgDir = handle @IOError (throwIO . ProfileIOError cfgDir)
 data ProfileMode = BuildMode | RunMode
   deriving (Show, Eq, Enum, Bounded)
 
+-- serviceDir is not specific to the config, but this does make things convenient.
 data Directories = MkDirectories {cfgDir, dataDir, cacheDir, logDir :: !FilePath}
   deriving (Show)
 
@@ -87,7 +88,8 @@ profileDeskEntry ProfileCfg{..} startPath =
 
 -- Load profile with the ID.
 loadProfile :: ManageEnv -> FilePath -> IO (Component ProfileMode, ID)
-loadProfile ManageEnv{..} cfgDir = profileOf <$> readProfileCfg cfgDir
+loadProfile ManageEnv{..} cfgDir = do
+  profileOf <$> readProfileCfg cfgDir
   where
     locFor ident str = envPath </> str </> idStr ident
     cfgFor path = cfgDir </> path
@@ -162,34 +164,41 @@ prepareDirectory MkDirectories{..} ManageEnv{..} = \case
 handleService :: ProfileCfg -> Directories -> ManageEnv -> Context ProfileMode -> IO ()
 handleService ProfileCfg{..} dirs@MkDirectories{..} ManageEnv{..} = \case
   CustomInstall -> do
+    serviceDir <- getXdgDirectory XdgConfig "systemd"
     createDirectoryIfMissing True serviceDir
+  --
   CustomRemove -> do
     logger "Removing systemd services..."
-    traverse_ removeService (runService : otherServices)
+    serviceDir <- getXdgDirectory XdgConfig "systemd"
+    traverse_ (removeService serviceDir) (runService : otherServices)
+  --
   InvokeOn BuildMode -> do
     -- Install on build to allow frequent changes of services
     logger "Installing systemd services..."
-    traverse_ setupService (runService : otherServices)
+    serviceDir <- getXdgDirectory XdgConfig "systemd"
+    traverse_ (setupService serviceDir) (runService : otherServices)
     callProcess "systemctl" ["--user", "daemon-reload"]
     logger "Systemd user daemon reloaded."
+  --
   InvokeOn RunMode -> do
     logger "Run through service %s..." (serviceNameOf runService)
     callProcess "systemctl" ["--user", "start", "--wait", serviceNameOf runService]
   where
     -- Setup service based on "template" at the path.
-    setupService templatePath = do
+    setupService serviceDir templatePath = do
       let serviceName = serviceNameOf templatePath
       logger "Service %s being installed." serviceName
       template <- T.readFile (cfgDir </> templatePath) >>= parseShellString serviceName
       service <- shellExpandWith (readEnv . T.unpack) template
       T.writeFile (serviceDir </> serviceName) service
-    removeService templatePath = do
+
+    removeService serviceDir templatePath = do
       let serviceName = serviceNameOf templatePath
       logger "Service %s being removed." serviceName
       removeFile (serviceDir </> serviceName)
 
     serviceNameOf templatePath = snd (splitFileName templatePath)
-    serviceDir = home </> ".config" </> "systemd" </> "user"
+    -- serviceDir = home </> ".config" </> "systemd" </> "user"
 
     serviceEnvs = M.insert "HOME" home $ environments dirs
     readEnv envName = case serviceEnvs M.!? envName of

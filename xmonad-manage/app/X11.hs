@@ -13,7 +13,7 @@ import Data.YAML
 import Manages
 import Modules
 import Packages
-import System.Directory (createDirectoryIfMissing)
+import System.Directory
 import System.FilePath
 import System.Process
 
@@ -107,10 +107,14 @@ x11Module = deps <> xresources <> xsettingsd <> xsetup
         logger "[X11] Installing X settings..."
         displayCfg <- loadDisplayCfg mEnv
         -- Need to create folder first
-        createDirectoryIfMissing True (home </> ".config" </> "xsettingsd")
-        T.writeFile (xsettingsPath home) $ xsettingsText (xsettingsConf displayCfg)
+        xsettingsDir <- getXdgDirectory XdgConfig "xsettingsd"
+        createDirectoryIfMissing False xsettingsDir
+        T.writeFile (xsettingsDir </> "xsettingsd.conf") $ xsettingsText (xsettingsConf displayCfg)
+      --
       CustomRemove -> do
-        logger "You may remove installed xsettingsd config %s." (xsettingsPath home)
+        xsettingsDir <- getXdgDirectory XdgConfig "xsettingsd"
+        logger "You may remove installed xsettingsd config %s." (xsettingsDir </> "xsettingsd.conf")
+      --
       InvokeOn Start -> do
         logger "[X11] Running XSettingsd for X settings."
         _ <- spawnProcess "xsettingsd" []
@@ -120,7 +124,6 @@ x11Module = deps <> xresources <> xsettingsd <> xsetup
         setServiceEnv "GTK_THEME" (T.unpack theme)
         setServiceEnv "QT_AUTO_SCREEN_SCALE_FACTOR" "1" -- HiDPI Scales for QT
         setServiceEnv "QT_QPA_PLATFORMTHEME" "qt5ct"
-    xsettingsPath home = home </> ".config" </> "xsettingsd" </> "xsettingsd.conf"
 
     xsetup = ofHandle $ \ManageEnv{..} -> \case
       InvokeOn Start -> do
