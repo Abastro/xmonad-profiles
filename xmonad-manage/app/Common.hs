@@ -44,9 +44,10 @@ setToExecutable path = do
   perm <- getPermissions path
   setPermissions path (setOwnerExecutable True perm)
 
+-- TODO Refactor
 -- | Data variable stored in XDG_DATA_DIR, with an action to reset it to default.
 dataVar :: (Serialize a) => String -> String -> IO a -> (StateVar a, IO ())
-dataVar appName loc mkDef = (var, restore)
+dataVar appName varName mkDef = (var, restore)
   where
     var = makeStateVar load save
     restore = mkDef >>= (var $=)
@@ -65,7 +66,7 @@ dataVar appName loc mkDef = (var, restore)
     datPath = do
       dataDir <- getXdgDirectory XdgData appName
       createDirectoryIfMissing True dataDir
-      (dataDir </> loc) <$ setPermissions dataDir perm
+      (dataDir </> varName) <$ setPermissions dataDir perm
     perm = setOwnerSearchable True . setOwnerReadable True . setOwnerWritable True $ emptyPermissions
 
 -- | Denotes ID, made of ASCII letters w/o space

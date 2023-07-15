@@ -91,6 +91,7 @@ x11Module = deps <> xresources <> xsettingsd <> xsetup
     deps = ofDependencies [AsPackage "libxss", AsPackage "xmonad", AsPackage "xsettingsd", AsPackage "xsetroot"]
     xresources = ofHandle $ \mEnv@ManageEnv{..} -> \case
       CustomInstall -> do
+        -- TODO getXDGDirectory?
         logger "[X11] Installing X-resources..."
         displayCfg <- loadDisplayCfg mEnv
         T.writeFile (xresourcesPath home) $ xresourcesText (xresourcesCfg displayCfg)

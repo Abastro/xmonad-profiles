@@ -1,0 +1,8 @@
+[Unit]
+Description=XMonad profile manager, profile %i.
+
+[Service]
+Type=simple
+StandardOutput=journal
+StandardError=journal
+ExecStart=/opt/bin/xmonad-manage %i
