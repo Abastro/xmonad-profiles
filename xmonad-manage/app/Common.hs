@@ -48,7 +48,8 @@ withTemporaryDirectory :: (FilePath -> IO ()) -> IO ()
 withTemporaryDirectory = bracket makeTempDir removePathForcibly
   where
     makeTempDir = do
-      tempDir <- getTemporaryDirectory
+      name <- getProgName
+      tempDir <- readProcess "mktemp" ["-d", "${TMPDIR:-/tmp/}" <> name <> ".XXXXXXXXXXXX"] []
       createDirectoryIfMissing True tempDir
       pure tempDir
 
