@@ -160,7 +160,9 @@ handleOption mEnv@ManageEnv{..} profiles = \case
     logger "Installing xmonad-manage service..."
     serviceDir <- getServiceDirectory GlobalService
     callProcess "sudo" ["cp", envPath </> "database" </> "xmonad-manage@.service", serviceDir]
-    logger "service installed at %s." (serviceDir </> "xmonad-manage@.service")
+    logger "Service installed at %s." (serviceDir </> "xmonad-manage@.service")
+    callProcess "systemctl" ["--user", "daemon-reload"]
+    logger "Systemd user daemon reloaded."
 
   -- Lists installed profiles
   ListProf -> do

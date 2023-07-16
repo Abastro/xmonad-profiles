@@ -1,0 +1,6 @@
+[Desktop Entry]
+Encoding=UTF-8
+Type=XSession
+Name=${PROFILE_NAME}
+Comment=${PROFILE_DETAILS}
+Exec=systemctl --user start xmonad-manage@${PROFILE_ID}

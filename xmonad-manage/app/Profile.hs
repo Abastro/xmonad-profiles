@@ -73,17 +73,6 @@ data ProfileMode = BuildMode | RunMode
 data Directories = MkDirectories {cfgDir, dataDir, cacheDir, logDir, serviceDir :: !FilePath}
   deriving (Show)
 
-profileDeskEntry :: ProfileSpec -> FilePath -> String
-profileDeskEntry ProfileSpec{..} startPath =
-  unlines
-    [ printf "[Desktop Entry]"
-    , printf "Encoding=UTF-8"
-    , printf "Type=XSession"
-    , printf "Name=%s" profileProps.profileName
-    , printf "Comment=%s" profileProps.profileDetails
-    , printf "Exec=%s" startPath
-    ]
-
 -- Load profile with the ID.
 loadProfile :: ManageEnv -> FilePath -> IO (Component ProfileMode, ID)
 loadProfile mEnv@ManageEnv{..} cfgDir = do
@@ -207,33 +196,32 @@ handleService ProfileSpec{..} dirs@MkDirectories{..} ManageEnv{..} = \case
     serviceEnvs = M.insert "HOME" home $ environments dirs
     readEnv envName = case serviceEnvs M.!? envName of
       Just val -> pure (T.pack val)
-      Nothing -> fail $ "Environment variable " <> envName <> " not found"
+      Nothing -> fail $ printf "Environment variable %s not found" envName
 
 prepareSession :: ProfileSpec -> Directories -> ManageEnv -> Context a -> IO ()
-prepareSession cfg@ProfileSpec{..} MkDirectories{..} ManageEnv{..} = \case
+prepareSession ProfileSpec{..} MkDirectories{..} ManageEnv{..} = \case
   Custom Install -> do
-    logger "Installing xsession runner..."
-    writeFile startPath startScript
-    setToExecutable startPath
-    writeFile deskEntryPath (profileDeskEntry cfg startPath)
+    logger "Installing xsession desktop entry..."
+    template <- T.readFile desktopTemplatePath >>= parseShellString "desktop entry template"
+    desktopEntry <- shellExpandWith (readEnv . T.unpack) template
+    T.writeFile intermediatePath desktopEntry
     -- Instead of linking, we copy the runner. Fixes issues with SDDM.
-    callProcess "sudo" ["cp", "-T", deskEntryPath, sessionPath]
+    callProcess "sudo" ["cp", "-T", intermediatePath, sessionPath]
   Custom Remove -> do
     logger "Removing xsession runner..."
     callProcess "sudo" ["rm", "-f", sessionPath]
   InvokeOn _ -> pure () -- Session is not something to invoke
   where
-    sessionPath = "/" </> "usr" </> "share" </> "xsessions" </> idStr profileID <.> "desktop"
-    deskEntryPath = dataDir </> "run" <.> "desktop"
+    desktopTemplatePath = envPath </> "database" </> "template" <.> "desktop"
+    sessionPath = "/usr" </> "share" </> "xsessions" </> idStr profileID <.> "desktop"
+    intermediatePath = dataDir </> "run" <.> "desktop"
 
-    startPath = dataDir </> "starter.sh"
-    startScript =
-      unlines
-        [ printf "#!/bin/sh"
-        , printf
-            "exec %s/xmonad-manage run %s > %s 2> %s"
-            thisInstallDirectory
-            (idStr profileID)
-            (show $ envPath </> "logs" </> "start.log")
-            (show $ envPath </> "logs" </> "start.err")
+    profileEnv =
+      M.fromList
+        [ ("PROFILE_ID", T.pack $ idStr profileID)
+        , ("PROFILE_NAME", profileProps.profileName)
+        , ("PROFILE_DETAILS", profileProps.profileDetails)
         ]
+    readEnv envName = case profileEnv M.!? envName of
+      Just val -> pure val
+      Nothing -> fail $ printf "Profile variable %s not found" envName

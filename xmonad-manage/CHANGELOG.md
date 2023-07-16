@@ -3,13 +3,14 @@
 ## master
 - **! Recommends re-installing your profile !**
 - Xmonad-manage is now installed in `/opt/bin`.
+- Xmonad-manage now runs as a systemd service.
 
 ## 0.7.1
 - Active modules are now based on configuration in `config/active-modules.yaml`.
 - X11 display configurations could be configured via `config/display-config.yaml`.
 
 ## 0.7.0
-- Now depends on systemd; profiles operate via service files.
+- Now depends on systemd; profiles operate as a systemd service.
 - Introduced `reset-save` command, only use it when the save gets corrupted.
 - (Changelogs in the previous versions have been lost)
 
