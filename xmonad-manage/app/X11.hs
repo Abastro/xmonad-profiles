@@ -86,10 +86,10 @@ xsettingsText cfg = T.unlines $ do
       SetInt i -> T.pack (show i)
       SetText txt -> "\"" <> txt <> "\""
 
-data ThisEnv = ThisEnv !ManageEnv !DisplayConfig !FilePath
+data ThisEnv = ThisEnv !FilePath !DisplayConfig !FilePath
 
 x11Module :: Component ModuleMode
-x11Module = xmonadDeps <> (readConfigs >>> xresources <> xsettingsd) <> xsetup
+x11Module = xmonadDeps <> (getConfig >>> xresources <> xsettingsd) <> xsetup
   where
     xmonadDeps = ofDependencies [AsPackage "libxss", AsPackage "xmonad"]
     xresources = ofHandle handleXresources
@@ -103,11 +103,11 @@ x11Module = xmonadDeps <> (readConfigs >>> xresources <> xsettingsd) <> xsetup
               callProcess "xsetroot" ["-cursor_name", "left_ptr"]
             _ -> pure ()
         }
-    readConfigs = ofHandle $ \mEnv _ -> do
-      ThisEnv mEnv <$> loadDisplayCfg mEnv <*> getXdgDirectory XdgConfig "xsettingsd"
+    getConfig = ofAction $ \mEnv -> do
+      ThisEnv mEnv.home <$> loadDisplayCfg mEnv <*> getXdgDirectory XdgConfig "xsettingsd"
 
 handleXresources :: ThisEnv -> Context ModuleMode -> IO ()
-handleXresources (ThisEnv mEnv displayCfg _) = \case
+handleXresources (ThisEnv home displayCfg _) = \case
   Custom Install -> do
     printf "[X11] Installing X-resources...\n"
     T.writeFile xresourcesPath $ xresourcesText (xresourcesCfg displayCfg)
@@ -117,7 +117,7 @@ handleXresources (ThisEnv mEnv displayCfg _) = \case
     printf "[X11] Reflect X-resources.\n"
     callProcess "xrdb" ["-merge", xresourcesPath]
   where
-    xresourcesPath = mEnv.home </> ".Xresources"
+    xresourcesPath = home </> ".Xresources"
 
 handleXsettings :: ThisEnv -> Context ModuleMode -> IO ()
 handleXsettings (ThisEnv _ displayCfg xsettingsDir) = \case
@@ -134,6 +134,6 @@ handleXsettings (ThisEnv _ displayCfg xsettingsDir) = \case
     printf "[X11] Running XSettingsd for X settings.\n"
     _ <- spawnProcess "xsettingsd" []
     -- Workaround for GTK4 apps reaching for GTK_THEME.
-    setServiceEnv "GTK_THEME" (T.unpack displayCfg.theme)
+    setServiceEnv "GTK_THEME" displayCfg.theme
     setServiceEnv "QT_AUTO_SCREEN_SCALE_FACTOR" "1" -- HiDPI Scales for QT
     setServiceEnv "QT_QPA_PLATFORMTHEME" "qt5ct"

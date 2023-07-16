@@ -176,5 +176,4 @@ setupEnvironment spec _ = \case
     forInEnv setServiceEnv
   where
     forInEnv act = for_ (M.toList spec.environment) $ \(key, str) -> do
-      formatted <- shellExpand str
-      act (T.unpack key) (T.unpack formatted)
+      act (T.unpack key) =<< shellExpand str

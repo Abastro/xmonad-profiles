@@ -12,7 +12,7 @@ module Common (
   makeID,
   makeIDM,
   readYAMLFile,
-  setEnv,
+  setNormalEnv,
   setServiceEnv,
   ServiceDirectory (..),
   getServiceDirectory,
@@ -24,6 +24,7 @@ module Common (
   parseShellString,
   shellExpandWith,
   shellExpand,
+  shellExpandFromMap,
 ) where
 
 import Control.Category
@@ -42,6 +43,7 @@ import System.Process
 import Text.Parsec qualified as P
 import Text.Printf
 import Prelude hiding (id, (.))
+import qualified Data.Map.Strict as M
 
 thisInstallDirectory :: FilePath
 thisInstallDirectory = "/opt" </> "bin"
@@ -85,13 +87,17 @@ readYAMLFile formatErr path = do
     Left (pos, err) -> (throwIO . formatErr) (prettyPosWithSource pos file "Wrong format" <> err)
     Right st -> pure st
 
+-- | setEnv, but with Text.
+setNormalEnv :: String -> T.Text -> IO ()
+setNormalEnv name val = setEnv name (T.unpack val)
+
 -- | Sets environment for both dbus and systemd services.
-setServiceEnv :: String -> String -> IO ()
+setServiceEnv :: String -> T.Text -> IO ()
 setServiceEnv name val = do
   callProcess
     "dbus-update-activation-environment"
     [ "--systemd"
-    , name <> "=" <> val
+    , name <> "=" <> T.unpack val
     ]
 
 data ServiceDirectory = GlobalService | PerUserService
@@ -187,3 +193,8 @@ shellExpandWith act (MkShellStr strs) = mconcat <$> traverse expand strs
 
 shellExpand :: ShellString -> IO T.Text
 shellExpand = shellExpandWith (fmap T.pack . getEnv . T.unpack)
+
+shellExpandFromMap :: MonadFail m => (forall a. String -> m a) -> M.Map String T.Text -> ShellString -> m T.Text
+shellExpandFromMap onMissing refMap = shellExpandWith $ \key -> case refMap M.!? T.unpack key of
+  Just val -> pure val
+  Nothing -> onMissing (T.unpack key)

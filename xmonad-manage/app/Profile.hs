@@ -127,14 +127,14 @@ executeScript _ script = \case
     callProcess script []
   InvokeOn RunMode -> pure () -- Services call the scripts, instead.
 
-environments :: Directories -> M.Map String String
+environments :: Directories -> M.Map String T.Text
 environments MkDirectories{..} =
   M.fromList
-    [ ("XMONAD_NAME", "xmonad-" <> arch <> "-" <> os)
-    , ("XMONAD_DATA_DIR", dataDir)
-    , ("XMONAD_CONFIG_DIR", configDir)
-    , ("XMONAD_CACHE_DIR", cacheDir)
-    , ("XMONAD_LOG_DIR", logDir)
+    [ ("XMONAD_NAME", T.pack $ "xmonad-" <> arch <> "-" <> os)
+    , ("XMONAD_DATA_DIR", T.pack dataDir)
+    , ("XMONAD_CONFIG_DIR", T.pack configDir)
+    , ("XMONAD_CACHE_DIR", T.pack cacheDir)
+    , ("XMONAD_LOG_DIR", T.pack logDir)
     ]
 
 getDirectories :: FilePath -> ProfileSpec -> ManageEnv -> IO Directories
@@ -166,14 +166,14 @@ setupEnvironment dirs mode = for_ (M.toList $ environments dirs) (uncurry putEnv
   where
     putEnv = case mode of
       InvokeOn RunMode -> setServiceEnv
-      _ -> setEnv
+      _ -> setNormalEnv
 
 prepareSession :: ProfileSpec -> Directories -> Context a -> IO ()
 prepareSession ProfileSpec{..} MkDirectories{..} = \case
   Custom Install -> do
     printf "Installing xsession desktop entry...\n"
     template <- T.readFile desktopTemplatePath >>= parseShellString "desktop entry template"
-    desktopEntry <- shellExpandWith (readEnv . T.unpack) template
+    desktopEntry <- shellExpandFromMap onEnvNotFound profileEnv template
     T.writeFile intermediatePath desktopEntry
     -- Instead of linking, we copy the runner. Fixes issues with SDDM.
     callProcess "sudo" ["cp", "-T", intermediatePath, sessionPath]
@@ -186,15 +186,13 @@ prepareSession ProfileSpec{..} MkDirectories{..} = \case
     sessionPath = "/usr" </> "share" </> "xsessions" </> idStr profileID <.> "desktop"
     intermediatePath = dataDir </> "run" <.> "desktop"
 
+    onEnvNotFound key = fail $ printf "Profile variable %s not found" key
     profileEnv =
       M.fromList
         [ ("PROFILE_ID", T.pack $ idStr profileID)
         , ("PROFILE_NAME", profileProps.profileName)
         , ("PROFILE_DETAILS", profileProps.profileDetails)
         ]
-    readEnv envName = case profileEnv M.!? envName of
-      Just val -> pure val
-      Nothing -> fail $ printf "Profile variable %s not found" envName
 
 handleService :: ProfileSpec -> Directories -> Context ProfileMode -> IO ()
 handleService ProfileSpec{..} dirs@MkDirectories{..} = \case
@@ -221,7 +219,7 @@ handleService ProfileSpec{..} dirs@MkDirectories{..} = \case
       let serviceName = serviceNameOf templatePath
       printf "Service %s being installed.\n" serviceName
       template <- T.readFile (configDir </> templatePath) >>= parseShellString serviceName
-      service <- shellExpandWith (readEnv . T.unpack) template
+      service <- shellExpandFromMap onEnvNotFound (environments dirs) template
       T.writeFile (serviceDir </> serviceName) service
 
     removeService templatePath = do
@@ -230,8 +228,4 @@ handleService ProfileSpec{..} dirs@MkDirectories{..} = \case
       removeFile (serviceDir </> serviceName)
 
     serviceNameOf templatePath = snd (splitFileName templatePath)
-
-    serviceEnvs = environments dirs
-    readEnv envName = case serviceEnvs M.!? envName of
-      Just val -> pure (T.pack val)
-      Nothing -> fail $ printf "Environment variable %s not found." envName
+    onEnvNotFound key = fail $ printf "Environment variable %s not found." key

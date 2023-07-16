@@ -22,6 +22,7 @@ import System.IO
 import System.Process
 import Text.Printf
 import X11
+import qualified Data.Text as T
 
 -- * Fetches from separate configuration directory for each profile.
 
@@ -214,4 +215,4 @@ handleOption mEnv@ManageEnv{..} profiles = \case
               ]
       printf "Updating path to \"%s\"...\n" newPath
       setEnv "PATH" newPath
-      setServiceEnv "PATH" newPath
+      setServiceEnv "PATH" (T.pack newPath)
