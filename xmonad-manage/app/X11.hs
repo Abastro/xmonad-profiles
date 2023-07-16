@@ -36,7 +36,7 @@ instance FromYAML DisplayConfig where
       <*> (m .: "Cursor-Theme")
 
 loadDisplayCfg :: ManageEnv -> IO DisplayConfig
-loadDisplayCfg mEnv@ManageEnv{..} = loadConfig mEnv "display-config.yaml" (readYAMLFile userError)
+loadDisplayCfg mEnv = loadConfig mEnv "display-config.yaml" (readYAMLFile userError)
 
 data SettingsValue = SetFlag !Bool | SetInt !Int | SetText !T.Text
 
@@ -54,7 +54,7 @@ xresourcesCfg DisplayConfig{..} =
 xresourcesText :: [(T.Text, SettingsValue)] -> T.Text
 xresourcesText cfg = T.unlines $ do
   (field, value) <- cfg
-  pure $ field <> ": " <> valueAsText value
+  [field <> ": " <> valueAsText value]
   where
     valueAsText = \case
       SetFlag flag -> if flag then "true" else "false"
@@ -79,7 +79,7 @@ xsettingsConf DisplayConfig{..} =
 xsettingsText :: [(T.Text, SettingsValue)] -> T.Text
 xsettingsText cfg = T.unlines $ do
   (field, value) <- cfg
-  pure $ field <> " " <> valueAsText value
+  [field <> " " <> valueAsText value]
   where
     valueAsText = \case
       SetFlag flag -> T.pack (show $ fromEnum flag)
@@ -97,7 +97,7 @@ x11Module = xmonadDeps <> (getConfig >>> xresources <> xsettingsd) <> xsetup
     xsetup =
       MkComponent
         { dependencies = [AsPackage "xsetroot"]
-        , handle = \ManageEnv{..} -> \case
+        , handle = \_ -> \case
             InvokeOn Start -> do
               callProcess "xrandr" []
               callProcess "xsetroot" ["-cursor_name", "left_ptr"]
@@ -128,12 +128,11 @@ handleXsettings (ThisEnv _ displayCfg xsettingsDir) = \case
     T.writeFile (xsettingsDir </> "xsettingsd.conf") $ xsettingsText (xsettingsConf displayCfg)
   --
   Custom Remove -> do
-    printf "You may remove installed xsettingsd config %s.\n" (xsettingsDir </> "xsettingsd.conf")
+    printf "You may remove installed xsettingsd config at %s.\n" (xsettingsDir </> "xsettingsd.conf")
   --
   InvokeOn Start -> do
     printf "[X11] Running XSettingsd for X settings.\n"
     _ <- spawnProcess "xsettingsd" []
-    -- Workaround for GTK4 apps reaching for GTK_THEME.
-    setServiceEnv "GTK_THEME" displayCfg.theme
+    setServiceEnv "GTK_THEME" displayCfg.theme -- Workaround for GTK4 apps reaching for GTK_THEME.
     setServiceEnv "QT_AUTO_SCREEN_SCALE_FACTOR" "1" -- HiDPI Scales for QT
     setServiceEnv "QT_QPA_PLATFORMTHEME" "qt5ct"

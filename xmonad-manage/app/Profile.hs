@@ -172,6 +172,7 @@ prepareSession :: ProfileSpec -> Directories -> Context a -> IO ()
 prepareSession ProfileSpec{..} dirs = \case
   Custom Install -> do
     printf "Installing xsession desktop entry...\n"
+    -- TODO This could be simplified
     template <- T.readFile desktopTemplatePath >>= parseShellString "desktop entry template"
     desktopEntry <- shellExpandFromMap onEnvNotFound profileEnv template
     T.writeFile intermediatePath desktopEntry

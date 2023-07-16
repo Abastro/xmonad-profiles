@@ -16,10 +16,6 @@ module Common (
   setServiceEnv,
   ServiceDirectory (..),
   getServiceDirectory,
-  ServiceType (..),
-  ServiceStream (..),
-  Service (..),
-  serviceFile,
   ShellString,
   parseShellString,
   shellExpandWith,
@@ -106,49 +102,6 @@ getServiceDirectory :: ServiceDirectory -> IO FilePath
 getServiceDirectory = \case
   GlobalService -> pure ("/etc" </> "systemd" </> "user")
   PerUserService -> (</> "user") <$> getXdgDirectory XdgConfig "systemd"
-
--- Well, I set this up, but seems not so useful
-data ServiceType = Simple | Exec
-data ServiceStream = Journal | FileWrite !FilePath
-
--- | A service definition for systemd application.
-data Service = MkService
-  { serviceType :: !ServiceType
-  , description :: !T.Text
-  , stdOut :: !ServiceStream
-  , stdErr :: !ServiceStream
-  , execStart :: !FilePath
-  , wantedBy :: ![FilePath]
-  }
-
-instance Show ServiceType where
-  show :: ServiceType -> String
-  show = \case
-    Simple -> "simple"
-    Exec -> "exec"
-instance Show ServiceStream where
-  show :: ServiceStream -> String
-  show = \case
-    Journal -> "journal"
-    FileWrite path -> "file:" <> path
-
-serviceFile :: Service -> String
-serviceFile MkService{..} =
-  unlines
-    [ printf "[Unit]"
-    , printf "Description=%s" description
-    , printf "[Service]"
-    , printf "Type=%s" (show serviceType)
-    , printf "StandardOutput=%s" (show stdOut)
-    , printf "StandardError=%s" (show stdErr)
-    , printf "ExecStart=%s" execStart
-    , printf "[Install]"
-    , wantedByTxt
-    ]
-  where
-    wantedByTxt = case wantedBy of
-      [] -> ""
-      xs -> printf "WantedBy=%s" (unwords xs)
 
 -- | Denotes a string with shell variables embedded.
 newtype ShellString = MkShellStr [ShellStrElem]

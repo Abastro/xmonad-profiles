@@ -99,8 +99,8 @@ loadActiveCfg mEnv = loadConfig mEnv "active-modules.yaml" readCfg
       pure modulePath
 
 canonPath :: ManageEnv -> ModulePath -> FilePath
-canonPath ManageEnv{envPath} = \case
-  BuiltIn ident -> envPath </> "modules" </> ident
+canonPath mEnv = \case
+  BuiltIn ident -> mEnv.envPath </> "modules" </> ident
   External path -> path
 
 activeModuleData :: ManageEnv -> ModuleSet ModulePath -> IO (ModuleSet ModuleSpec)
