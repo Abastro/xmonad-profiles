@@ -2,7 +2,9 @@
 
 -- | Checked stuffs.
 module Common (
+  thisInstallDirectory,
   setToExecutable,
+  withTemporaryDirectory,
   ID,
   idStr,
   makeID,
@@ -34,10 +36,21 @@ import System.Process
 import Text.Parsec qualified as P
 import Text.Printf
 
+thisInstallDirectory :: FilePath
+thisInstallDirectory = "/opt/bin"
+
 setToExecutable :: FilePath -> IO ()
 setToExecutable path = do
   perm <- getPermissions path
   setPermissions path (setOwnerExecutable True perm)
+
+withTemporaryDirectory :: (FilePath -> IO ()) -> IO ()
+withTemporaryDirectory = bracket makeTempDir removePathForcibly
+  where
+    makeTempDir = do
+      tempDir <- getTemporaryDirectory
+      createDirectoryIfMissing True tempDir
+      pure tempDir
 
 -- | Denotes ID, made of ASCII letters w/o space
 newtype ID = ID String deriving newtype (Show, Eq, Ord, Serialize)
@@ -121,8 +134,13 @@ data ShellStrElem = Str !T.Text | Var !T.Text
 
 -- | Example:
 --
--- >>> parseShellString (T.pack "Hello, ${NAME}! ${GREETINGS}.")
+-- >>> parseShellString "example text" (T.pack "Hello, ${NAME}! ${GREETINGS}.")
 -- MkShellStr [Str "Hello, ",Var "NAME",Str "! ",Var "GREETINGS",Str "."]
+--
+-- >>> parseShellString "error example" (T.pack "Unmatched ${ bracket")
+-- user error ("error example" (line 1, column 21):
+-- unexpected end of input
+-- expecting variable)
 parseShellString :: (MonadFail m) => String -> T.Text -> m ShellString
 parseShellString name txt = case P.parse shellStr name txt of
   Left err -> fail (show err)

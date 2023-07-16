@@ -6,6 +6,7 @@ import Common
 import Component
 import Control.Exception
 import Data.Foldable
+import Data.List
 import Data.Map.Strict qualified as M
 import Data.StateVar
 import Manages
@@ -16,6 +17,7 @@ import Profile
 import System.Directory
 import System.Environment
 import System.Exit
+import System.FilePath
 import System.IO
 import System.Process
 import Text.Printf
@@ -33,7 +35,7 @@ import X11
 -- If this were statically compiled, it would not matter, but it will take more size.
 -- ? Need analyzing dependencies - e.g. PulpMonad relies a lot on Gnome environment.
 
--- TODO Adopt XDG Directory
+-- TODO Further adopt XDG Directory
 
 data Action
   = Update
@@ -90,19 +92,49 @@ manageOpts =
             <> Opts.help "Run installation regardless of whether it was installed or not."
         )
 
+-- | The manager program. Current directory needs to be the profile main directory.
+main :: IO ()
+main = (`catch` handleError) $ do
+  hSetBuffering stdout LineBuffering -- For consistent line buffering
+  cmdLine <- unwords <$> getArgs
+  home <- getHomeDirectory
+
+  ManageSaved{managePath = envPath, profiles} <- get varMS
+  let logger str = printf (printf "[%s] %s\n" cmdLine str)
+      mEnv = ManageEnv{..}
+  Opts.customExecParser optPrefs manageOpts >>= handleOption mEnv profiles
+  where
+    -- MAYBE Do these need to be here?
+    handleError = \case
+      ProfileNotFound profID -> do
+        hPrintf stderr "Error: Profile %s not found\n" (idStr profID)
+        exitWith (ExitFailure 1)
+      ProfileIOError profPath err -> do
+        hPrintf stderr "Error: IO Exception while loading profile on path %s\n" profPath
+        hPrintf stderr "Details: %s\n" (show err)
+        exitWith (ExitFailure 2)
+      ProfileWrongFormat details -> do
+        hPrintf stderr "Error: Profile cannot be read from profile.cfg\n"
+        hPrintf stderr "Details: %s\n" details
+        exitWith (ExitFailure 3)
+
 handleOption :: ManageEnv -> M.Map ID FilePath -> Action -> IO ()
 handleOption mEnv@ManageEnv{..} profiles = \case
   Update -> region "Updating..." "Updated." $ withCurrentDirectory envPath $ do
-    callProcess
-      "cabal"
-      [ "install"
-      , "exe:xmonad-manage"
-      , "--overwrite-policy=always"
-      , "--disable-executable-dynamic"
-      , "--install-method=copy"
-      ]
+    withTemporaryDirectory $ \tmpDir -> do
+      -- To install into /opt/bin, build into temporary directory and then move it.
+      callProcess
+        "cabal"
+        [ "install"
+        , "exe:xmonad-manage"
+        , "--overwrite-policy=always"
+        , "--disable-executable-dynamic"
+        , "--install-method=copy"
+        , "--install-dir=" <> tmpDir
+        ]
+      callProcess "sudo" ["mkdir", "-p", thisInstallDirectory]
+      callProcess "sudo" ["cp", tmpDir </> "xmonad-manage", thisInstallDirectory]
     -- In case it is updated, need to reset!
-    -- TODO Copy to /opt/bin directory for running without depending on a user
     get varMS
 
   -- Resets the save if corrupted
@@ -161,6 +193,8 @@ handleOption mEnv@ManageEnv{..} profiles = \case
   -- Automatic profile run
   RunProf profID -> region "Setup" "Exit" $ withProfPath profID $ \cfgPath -> do
     withCurrentDirectory home $ do
+      -- PATH needs updating
+      updatePATH home
       modules <- activeModules mEnv loadX11Module =<< loadActiveCfg mEnv
       invoke mEnv Start (mconcat modules)
       logger "Booting xmonad..."
@@ -186,27 +220,18 @@ handleOption mEnv@ManageEnv{..} profiles = \case
           Nothing -> logger "%s: None" (show typ)
       logger "Others: %s" $ show $ (\mod -> mod.name) <$> modules.otherModules
 
--- | The manager program. Current directory needs to be the profile main directory.
-main :: IO ()
-main = (`catch` handleError) $ do
-  hSetBuffering stdout LineBuffering -- For consistent line buffering
-  cmdLine <- unwords <$> getArgs
-  home <- getHomeDirectory
-  ManageSaved{managePath = envPath, profiles} <- get varMS
-  let logger str = printf (printf "[%s] %s\n" cmdLine str)
-      mEnv = ManageEnv{envPath, home, logger}
-  Opts.customExecParser optPrefs manageOpts >>= handleOption mEnv profiles
-  where
-    -- MAYBE Do these need to be here?
-    handleError = \case
-      ProfileNotFound profID -> do
-        hPrintf stderr "Error: Profile %s not found\n" (idStr profID)
-        exitWith (ExitFailure 1)
-      ProfileIOError profPath err -> do
-        hPrintf stderr "Error: IO Exception while loading profile on path %s\n" profPath
-        hPrintf stderr "Details: %s\n" (show err)
-        exitWith (ExitFailure 2)
-      ProfileWrongFormat details -> do
-        hPrintf stderr "Error: Profile cannot be read from profile.cfg\n"
-        hPrintf stderr "Details: %s\n" details
-        exitWith (ExitFailure 3)
+    updatePATH :: FilePath -> IO ()
+    updatePATH home = do
+      path <- getEnv "PATH"
+      -- Blame ghcup for not putting environment inside .profile, duh
+      -- ? Maybe check if these are added in PATH beforehand
+      let newPath =
+            intercalate
+              ":"
+              [ home </> ".cabal" </> "bin"
+              , home </> ".ghcup" </> "bin"
+              , thisInstallDirectory
+              , path
+              ]
+      setEnv "PATH" newPath
+      setServiceEnv "PATH" newPath

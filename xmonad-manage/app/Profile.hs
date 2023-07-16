@@ -231,10 +231,9 @@ prepareSession cfg@ProfileSpec{..} MkDirectories{..} ManageEnv{..} = \case
     startScript =
       unlines
         [ printf "#!/bin/sh"
-        , printf "export PATH=$HOME/.cabal/bin:$HOME/.ghcup/bin:$PATH"
-        , printf "systemctl --user import-environment PATH" -- Blame ghcup for not putting environment inside .profile
         , printf
-            "exec xmonad-manage run %s > %s 2> %s"
+            "exec %s/xmonad-manage run %s > %s 2> %s"
+            thisInstallDirectory
             (idStr profileID)
             (show $ envPath </> "logs" </> "start.log")
             (show $ envPath </> "logs" </> "start.err")
