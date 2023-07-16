@@ -2,6 +2,8 @@
 
 -- | Checked stuffs.
 module Common (
+  module Prelude,
+  module Control.Category,
   thisInstallDirectory,
   setToExecutable,
   withTemporaryDirectory,
@@ -24,6 +26,7 @@ module Common (
   shellExpand,
 ) where
 
+import Control.Category
 import Control.Exception
 import Control.Monad
 import Data.ByteString.Lazy qualified as B
@@ -38,6 +41,7 @@ import System.FilePath
 import System.Process
 import Text.Parsec qualified as P
 import Text.Printf
+import Prelude hiding (id, (.))
 
 thisInstallDirectory :: FilePath
 thisInstallDirectory = "/opt" </> "bin"

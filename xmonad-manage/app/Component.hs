@@ -1,7 +1,8 @@
 module Component (
   SetupPhase (..),
   Context (..),
-  Component (..),
+  ComponentCat (..),
+  Component,
   install,
   remove,
   invoke,
@@ -24,57 +25,70 @@ data Context mode = Custom SetupPhase | InvokeOn mode
 -- | A unit of installation. Can be conveniently merged.
 --
 -- When merged, former component is executed first.
-data Component mode a = MkComponent
+data ComponentCat mode env a = MkComponent
   { dependencies :: [Package]
-  , handle :: ManageEnv -> Context mode -> IO a
+  , handle :: env -> Context mode -> IO a
   }
 
-instance (Semigroup a) => Semigroup (Component mode a) where
-  (<>) :: (Semigroup a) => Component mode a -> Component mode a -> Component mode a
+type Component mode = ComponentCat mode ManageEnv ()
+
+instance (Semigroup a) => Semigroup (ComponentCat mode r a) where
+  (<>) :: (Semigroup a) => ComponentCat mode r a -> ComponentCat mode r a -> ComponentCat mode r a
   MkComponent dep han <> MkComponent dep' han' = MkComponent (dep <> dep') (han <> han')
-instance (Monoid a) => Monoid (Component mode a) where
-  mempty :: (Monoid a) => Component mode a
+instance (Monoid a) => Monoid (ComponentCat mode r a) where
+  mempty :: (Monoid a) => ComponentCat mode r a
   mempty = MkComponent mempty mempty
 
-instance Functor (Component mode) where
-  fmap :: (a -> b) -> Component mode a -> Component mode b
+instance Functor (ComponentCat mode r) where
+  fmap :: (a -> b) -> ComponentCat mode r a -> ComponentCat mode r b
   fmap = liftA
-instance Applicative (Component mode) where
-  pure :: a -> Component mode a
+instance Applicative (ComponentCat mode r) where
+  pure :: a -> ComponentCat mode r a
   pure ret = MkComponent [] (\_ _ -> pure ret)
-  (<*>) :: Component mode (a -> b) -> Component mode a -> Component mode b
+  (<*>) :: ComponentCat mode r (a -> b) -> ComponentCat mode r a -> ComponentCat mode r b
   f <*> x =
     MkComponent
       { dependencies = f.dependencies <> x.dependencies
-      , handle = \mEnv ctxt -> f.handle mEnv ctxt <*> x.handle mEnv ctxt
+      , handle = \env ctxt -> f.handle env ctxt <*> x.handle env ctxt
+      }
+instance Category (ComponentCat mode) where
+  id :: ComponentCat mode a a
+  id = MkComponent [] (\x _ -> pure x)
+  (.) :: ComponentCat mode b c -> ComponentCat mode a b -> ComponentCat mode a c
+  g . f =
+    MkComponent
+      { dependencies = f.dependencies <> g.dependencies
+      , handle = \x ctxt -> do
+          y <- f.handle x ctxt
+          g.handle y ctxt
       }
 
-install :: ManageEnv -> PkgDatabase -> ManageID -> InstallCond -> Component mode () -> IO ()
-install mEnv@ManageEnv{..} pkgDb distro cond MkComponent{..} = do
+install :: ManageEnv -> PkgDatabase -> ManageID -> InstallCond -> ComponentCat mode ManageEnv () -> IO ()
+install env pkgDb distro cond MkComponent{..} = do
   printf "Installing dependencies...\n"
-  installPackages mEnv pkgDb distro cond dependencies
+  installPackages env pkgDb distro cond dependencies
   printf "Running custom installation process...\n"
-  handle mEnv (Custom Install)
+  handle env (Custom Install)
 
 --  * When removal is being implemented, both distro and package database is needed.
-remove :: ManageEnv -> Component mode () -> IO ()
-remove mEnv@ManageEnv{..} MkComponent{..} = do
+remove :: env -> ComponentCat mode env () -> IO ()
+remove env MkComponent{..} = do
   printf "Removing dependencies is not yet implemented.\n"
   printf "Packages %s was installed.\n" (show $ packageName <$> dependencies)
   printf "Running custom removal process...\n"
-  handle mEnv (Custom Remove)
+  handle env (Custom Remove)
 
-invoke :: ManageEnv -> mode -> Component mode () -> IO ()
-invoke mEnv mode MkComponent{..} = do
-  handle mEnv (InvokeOn mode)
+invoke :: env -> mode -> ComponentCat mode env () -> IO ()
+invoke env mode MkComponent{..} = do
+  handle env (InvokeOn mode)
 
 -- | Make a component from script, which uses given script executor.
 fromScript ::
   (Enum mode, Bounded mode) =>
-  (ManageEnv -> FilePath -> Context mode -> IO ()) ->
+  (env -> FilePath -> Context mode -> IO ()) ->
   (SetupPhase -> Maybe FilePath) ->
   (mode -> FilePath) ->
-  Component mode ()
+  ComponentCat mode env ()
 fromScript executor setupScripts invokeScripts = ofHandle $ \mEnv -> \case
   Custom phase -> do
     case phase of
@@ -86,8 +100,8 @@ fromScript executor setupScripts invokeScripts = ofHandle $ \mEnv -> \case
   InvokeOn ctxt -> do
     executor mEnv (invokeScripts ctxt) (InvokeOn ctxt)
 
-ofHandle :: (ManageEnv -> Context mode -> IO ()) -> Component mode ()
+ofHandle :: (env -> Context mode -> IO a) -> ComponentCat mode env a
 ofHandle handle = MkComponent{dependencies = [], handle}
 
-ofDependencies :: [Package] -> Component mode ()
+ofDependencies :: [Package] -> ComponentCat mode env ()
 ofDependencies dependencies = MkComponent{dependencies, handle = mempty}

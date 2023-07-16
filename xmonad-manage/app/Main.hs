@@ -128,7 +128,7 @@ handleOption mEnv@ManageEnv{..} profiles = \case
     putStrLn "Proceed? (Ctrl+C to cancel)"
     _ <- getLine
 
-    modules <- activeModules mEnv loadX11Module activeCfg
+    modules <- activeModules mEnv x11Module activeCfg
     pkgDb <- getDatabase mEnv
     distro <- findDistro mEnv
     install mEnv pkgDb distro installCond (mconcat modules)
@@ -178,7 +178,7 @@ handleOption mEnv@ManageEnv{..} profiles = \case
     withCurrentDirectory home $ do
       -- PATH needs updating
       updatePATH home
-      modules <- activeModules mEnv loadX11Module =<< loadActiveCfg mEnv
+      modules <- activeModules mEnv x11Module =<< loadActiveCfg mEnv
       invoke mEnv Start (mconcat modules)
       putStrLn "Booting xmonad..."
       (profile, _) <- loadProfile mEnv cfgPath

@@ -2,7 +2,7 @@
 
 -- | X11 setup and settings.
 module X11 (
-  loadX11Module,
+  x11Module,
 ) where
 
 import Common
@@ -86,19 +86,22 @@ xsettingsText cfg = T.unlines $ do
       SetInt i -> T.pack (show i)
       SetText txt -> "\"" <> txt <> "\""
 
-loadX11Module :: IO (Component ModuleMode ())
-loadX11Module = do
-  xsDir <- getXdgDirectory XdgConfig "xsettingsd"
-  pure (deps <> xresources <> xsettingsd xsDir <> xsetup)
+x11Module :: Component ModuleMode
+x11Module = xmonadDeps <> xresources <> (xsettingsd . getXsettingsDir) <> xsetup
   where
-    deps = ofDependencies [AsPackage "libxss", AsPackage "xmonad", AsPackage "xsettingsd", AsPackage "xsetroot"]
+    xmonadDeps = ofDependencies [AsPackage "libxss", AsPackage "xmonad"]
     xresources = ofHandle handleXresources
-    xsettingsd xsDir = ofHandle (handleXsettings xsDir)
-    xsetup = ofHandle $ \ManageEnv{..} -> \case
-      InvokeOn Start -> do
-        callProcess "xrandr" []
-        callProcess "xsetroot" ["-cursor_name", "left_ptr"]
-      _ -> pure ()
+    xsettingsd = MkComponent{dependencies = [AsPackage "xsettingsd"], handle = handleXsettings}
+    xsetup =
+      MkComponent
+        { dependencies = [AsPackage "xsetroot"]
+        , handle = \ManageEnv{..} -> \case
+            InvokeOn Start -> do
+              callProcess "xrandr" []
+              callProcess "xsetroot" ["-cursor_name", "left_ptr"]
+            _ -> pure ()
+        }
+    getXsettingsDir = ofHandle $ \mEnv _ -> (mEnv, ) <$> getXdgDirectory XdgConfig "xsettingsd"
 
 handleXresources :: ManageEnv -> Context ModuleMode -> IO ()
 handleXresources mEnv@ManageEnv{..} = \case
@@ -114,8 +117,8 @@ handleXresources mEnv@ManageEnv{..} = \case
   where
     xresourcesPath home = home </> ".Xresources"
 
-handleXsettings :: FilePath -> ManageEnv -> Context ModuleMode -> IO ()
-handleXsettings xsettingsDir mEnv@ManageEnv{..} = \case
+handleXsettings :: (ManageEnv, FilePath) -> Context ModuleMode -> IO ()
+handleXsettings (mEnv@ManageEnv{..}, xsettingsDir) = \case
   Custom Install -> do
     printf "[X11] Installing X settings...\n"
     displayCfg <- loadDisplayCfg mEnv
