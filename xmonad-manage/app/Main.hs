@@ -202,6 +202,7 @@ handleOption mEnv@ManageEnv{..} profiles = \case
     withCurrentDirectory home $ do
       -- PATH needs updating
       updatePATH home
+      callProcess "echo" ["Checking process calls."]
       modules <- activeModules mEnv loadX11Module =<< loadActiveCfg mEnv
       invoke mEnv Start (mconcat modules)
       logger "Booting xmonad..."

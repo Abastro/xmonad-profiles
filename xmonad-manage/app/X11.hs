@@ -130,7 +130,6 @@ handleXsettings xsettingsDir mEnv@ManageEnv{..} = \case
     _ <- spawnProcess "xsettingsd" []
     -- Workaround for GTK4 apps reaching for GTK_THEME.
     DisplayConfig{theme} <- loadDisplayCfg mEnv
-    -- ? Do we need to call dbus-update-activation-environment?
     setServiceEnv "GTK_THEME" (T.unpack theme)
     setServiceEnv "QT_AUTO_SCREEN_SCALE_FACTOR" "1" -- HiDPI Scales for QT
     setServiceEnv "QT_QPA_PLATFORMTHEME" "qt5ct"
