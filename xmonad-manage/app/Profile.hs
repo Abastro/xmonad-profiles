@@ -88,7 +88,7 @@ profileDeskEntry ProfileSpec{..} startPath =
 loadProfile :: ManageEnv -> FilePath -> IO (Component ProfileMode, ID)
 loadProfile mEnv@ManageEnv{..} cfgDir = do
   spec@ProfileSpec{profileID} <- readProfileSpec cfgDir
-  serviceDir <- (</> "user") <$> getXdgDirectory XdgConfig "systemd"
+  serviceDir <- getServiceDirectory PerUserService
   pure $ profileForSpec mEnv (dirsOf profileID serviceDir) spec
   where
     locFor ident str = envPath </> str </> idStr ident

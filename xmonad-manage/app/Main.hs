@@ -157,6 +157,11 @@ handleOption mEnv@ManageEnv{..} profiles = \case
     distro <- findDistro mEnv
     install mEnv pkgDb distro installCond (mconcat modules)
 
+    logger "Installing xmonad-manage service..."
+    serviceDir <- getServiceDirectory GlobalService
+    callProcess "sudo" ["cp", envPath </> "database" </> "xmonad-manage@.service", serviceDir]
+    logger "service installed at %s." (serviceDir </> "xmonad-manage@.service")
+
   -- Lists installed profiles
   ListProf -> do
     logger "Available profiles:"
