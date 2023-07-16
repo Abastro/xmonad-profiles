@@ -133,7 +133,7 @@ handleOption mEnv@ManageEnv{..} profiles = \case
         , "--installdir=" <> tmpDir
         ]
       callProcess "sudo" ["mkdir", "-p", thisInstallDirectory]
-      callProcess "sudo" ["cp", tmpDir </> "xmonad-manage", thisInstallDirectory]
+      callProcess "sudo" ["mv", tmpDir </> "xmonad-manage", thisInstallDirectory]
     -- In case it is updated, need to reset!
     get varMS
 
