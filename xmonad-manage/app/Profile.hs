@@ -163,10 +163,10 @@ prepareDirectory :: Directories -> ManageEnv -> Context a -> IO ()
 prepareDirectory MkDirectories{..} ManageEnv{..} = \case
   Custom Install -> do
     logger "Preparing profile directories..."
-    traverse_ (createDirectoryIfMissing True) [dataDir, cacheDir, logDir]
+    traverse_ (createDirectoryIfMissing True) [dataDir, cacheDir]
   Custom Remove -> do
     logger "Removing profile directories..."
-    traverse_ removePathForcibly [dataDir, cacheDir, logDir]
+    traverse_ removePathForcibly [dataDir, cacheDir]
   InvokeOn _ -> pure ()
 
 handleService :: ProfileSpec -> Directories -> ManageEnv -> Context ProfileMode -> IO ()

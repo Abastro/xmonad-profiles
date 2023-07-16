@@ -1,5 +1,9 @@
 # Changelog
 
+## master
+- **! Recommends re-installing your profile !**
+- Xmonad-manage is now installed in `/opt/bin`.
+
 ## 0.7.1
 - Active modules are now based on configuration in `config/active-modules.yaml`.
 - X11 display configurations could be configured via `config/display-config.yaml`.
