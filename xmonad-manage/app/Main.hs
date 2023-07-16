@@ -130,7 +130,7 @@ handleOption mEnv@ManageEnv{..} profiles = \case
         , "--overwrite-policy=always"
         , "--disable-executable-dynamic"
         , "--install-method=copy"
-        , "--install-dir=" <> tmpDir
+        , "--installdir=" <> tmpDir
         ]
       callProcess "sudo" ["mkdir", "-p", thisInstallDirectory]
       callProcess "sudo" ["cp", tmpDir </> "xmonad-manage", thisInstallDirectory]
