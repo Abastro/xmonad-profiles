@@ -74,7 +74,7 @@ data Directories = MkDirectories {cfgDir, dataDir, cacheDir, logDir, serviceDir 
   deriving (Show)
 
 -- Load profile with the ID.
-loadProfile :: ManageEnv -> FilePath -> IO (Component ProfileMode, ID)
+loadProfile :: ManageEnv -> FilePath -> IO (Component ProfileMode (), ID)
 loadProfile mEnv@ManageEnv{..} cfgDir = do
   spec@ProfileSpec{profileID} <- readProfileSpec cfgDir
   serviceDir <- getServiceDirectory PerUserService
@@ -90,7 +90,7 @@ loadProfile mEnv@ManageEnv{..} cfgDir = do
         , serviceDir
         }
 
-profileForSpec :: ManageEnv -> Directories -> ProfileSpec -> (Component ProfileMode, ID)
+profileForSpec :: ManageEnv -> Directories -> ProfileSpec -> (Component ProfileMode (), ID)
 profileForSpec ManageEnv{..} dirs@MkDirectories{..} cfg@ProfileSpec{..} = (profile, profileID)
   where
     profile = deps <> prepDirectory <> prepSession <> setupEnv <> useService <> scripts <> buildOnInstall

@@ -107,7 +107,7 @@ activeModuleData :: ManageEnv -> ModuleSet ModulePath -> IO (ModuleSet ModuleSpe
 activeModuleData mEnv = traverse (readModuleSpec . canonPath mEnv)
 
 -- | Load all active modules. Takes X11 module as a parameter.
-activeModules :: ManageEnv -> IO (Component ModuleMode) -> ModuleSet ModulePath -> IO [Component ModuleMode]
+activeModules :: ManageEnv -> IO (Component ModuleMode ()) -> ModuleSet ModulePath -> IO [Component ModuleMode ()]
 activeModules mEnv mkX11 moduleSet = do
   x11Module <- mkX11
   loaded <- traverse (loadModule . canonPath mEnv) moduleSet
@@ -137,10 +137,10 @@ instance FromYAML ModuleSpec where
 readModuleSpec :: FilePath -> IO ModuleSpec
 readModuleSpec moduleDir = readYAMLFile userError (moduleDir </> "module.yaml")
 
-loadModule :: FilePath -> IO (Component ModuleMode)
+loadModule :: FilePath -> IO (Component ModuleMode ())
 loadModule moduleDir = moduleForSpec moduleDir <$> readModuleSpec moduleDir
 
-moduleForSpec :: FilePath -> ModuleSpec -> Component ModuleMode
+moduleForSpec :: FilePath -> ModuleSpec -> Component ModuleMode ()
 moduleForSpec moduleDir ModuleSpec{..} = deps <> setupEnv <> scripts
   where
     deps = ofDependencies dependencies

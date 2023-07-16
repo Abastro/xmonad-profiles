@@ -97,7 +97,7 @@ main = (`catch` handleError) $ do
   ManageSaved{managePath = envPath, profiles} <- get varMS
   Opts.customExecParser optPrefs manageOpts >>= handleOption ManageEnv{..} profiles
   where
-    -- MAYBE Do these need to be here?
+    -- ? Do these need to be here?
     handleError = \case
       ProfileNotFound profID -> do
         hPrintf stderr "Error: Profile %s not found\n" (idStr profID)

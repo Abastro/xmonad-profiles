@@ -86,7 +86,7 @@ xsettingsText cfg = T.unlines $ do
       SetInt i -> T.pack (show i)
       SetText txt -> "\"" <> txt <> "\""
 
-loadX11Module :: IO (Component ModuleMode)
+loadX11Module :: IO (Component ModuleMode ())
 loadX11Module = do
   xsDir <- getXdgDirectory XdgConfig "xsettingsd"
   pure (deps <> xresources <> xsettingsd xsDir <> xsetup)
