@@ -14,6 +14,7 @@ import Common
 import Data.Foldable
 import Manages
 import Packages
+import Text.Printf
 
 data SetupPhase = Install | Remove
   deriving (Eq, Show, Enum, Bounded)
@@ -35,17 +36,17 @@ instance Monoid (Component a) where
 
 install :: ManageEnv -> PkgDatabase -> ManageID -> InstallCond -> Component a -> IO ()
 install mEnv@ManageEnv{..} pkgDb distro cond MkComponent{..} = do
-  logger "Installing dependencies.."
+  printf "Installing dependencies...\n"
   installPackages mEnv pkgDb distro cond dependencies
-  logger "Running custom installation process.."
+  printf "Running custom installation process...\n"
   handle mEnv (Custom Install)
 
 --  * When removal is being implemented, both distro and package database is needed.
 remove :: ManageEnv -> Component a -> IO ()
 remove mEnv@ManageEnv{..} MkComponent{..} = do
-  logger "Removing dependencies is not yet implemented."
-  logger "Packages %s was installed." (show $ packageName <$> dependencies)
-  logger "Running custom removal process..."
+  printf "Removing dependencies is not yet implemented.\n"
+  printf "Packages %s was installed.\n" (show $ packageName <$> dependencies)
+  printf "Running custom removal process...\n"
   handle mEnv (Custom Remove)
 
 invoke :: ManageEnv -> a -> Component a -> IO ()

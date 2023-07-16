@@ -34,7 +34,6 @@ data ManageEnv = ManageEnv
   { envPath :: !FilePath
   , home :: !FilePath
   -- ^ Home directory for easier referencing
-  , logger :: forall r. (PrintfType r) => String -> r
   }
 
 mkMS :: IO ManageSaved
@@ -75,12 +74,12 @@ dataVar appName varName mkDef = (var, restore)
 loadConfig :: ManageEnv -> String -> (FilePath -> IO a) -> IO a
 loadConfig ManageEnv{..} cfgName reader =
   catch (reader configPath) $ \(exc :: IOException) -> do
-    logger "Cannot identify the configuration %s due to:" cfgName
+    printf "Cannot identify the configuration %s due to:\n" cfgName
     hPrint stderr exc
-    logger "Reverting configuration to default."
+    printf "Reverting configuration to default.\n"
     createDirectoryIfMissing True (envPath </> "config")
     copyFile templatePath configPath
-    logger "Trying again..."
+    printf "Trying again...\n"
     reader configPath
   where
     templatePath = envPath </> "database" </> cfgName

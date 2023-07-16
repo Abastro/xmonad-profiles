@@ -16,6 +16,7 @@ import Packages
 import System.Directory
 import System.FilePath
 import System.Process
+import Text.Printf
 
 data DisplayConfig = DisplayConfig
   { scalingFactor :: !Int
@@ -102,13 +103,13 @@ loadX11Module = do
 handleXresources :: ManageEnv -> Context ModuleMode -> IO ()
 handleXresources mEnv@ManageEnv{..} = \case
   Custom Install -> do
-    logger "[X11] Installing X-resources..."
+    printf "[X11] Installing X-resources...\n"
     displayCfg <- loadDisplayCfg mEnv
     T.writeFile (xresourcesPath home) $ xresourcesText (xresourcesCfg displayCfg)
   Custom Remove -> do
-    logger "You may remove installed X-resources config %s." (xresourcesPath home)
+    printf "You may remove installed X-resources config %s.\n" (xresourcesPath home)
   InvokeOn Start -> do
-    logger "[X11] Reflect X-resources."
+    printf "[X11] Reflect X-resources.\n"
     callProcess "xrdb" ["-merge", xresourcesPath home]
   where
     xresourcesPath home = home </> ".Xresources"
@@ -116,17 +117,17 @@ handleXresources mEnv@ManageEnv{..} = \case
 handleXsettings :: FilePath -> ManageEnv -> Context ModuleMode -> IO ()
 handleXsettings xsettingsDir mEnv@ManageEnv{..} = \case
   Custom Install -> do
-    logger "[X11] Installing X settings..."
+    printf "[X11] Installing X settings...\n"
     displayCfg <- loadDisplayCfg mEnv
     -- Need to create folder first
     createDirectoryIfMissing False xsettingsDir
     T.writeFile (xsettingsDir </> "xsettingsd.conf") $ xsettingsText (xsettingsConf displayCfg)
   --
   Custom Remove -> do
-    logger "You may remove installed xsettingsd config %s." (xsettingsDir </> "xsettingsd.conf")
+    printf "You may remove installed xsettingsd config %s.\n" (xsettingsDir </> "xsettingsd.conf")
   --
   InvokeOn Start -> do
-    logger "[X11] Running XSettingsd for X settings."
+    printf "[X11] Running XSettingsd for X settings.\n"
     _ <- spawnProcess "xsettingsd" []
     -- Workaround for GTK4 apps reaching for GTK_THEME.
     DisplayConfig{theme} <- loadDisplayCfg mEnv

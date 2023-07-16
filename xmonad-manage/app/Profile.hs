@@ -122,12 +122,12 @@ executeScript :: ManageEnv -> FilePath -> Context ProfileMode -> IO ()
 executeScript ManageEnv{..} script = \case
   Custom phase -> do
     case phase of
-      Install -> logger "Install using %s..." script
-      Remove -> logger "Remove using %s..." script
+      Install -> printf "Install using %s...\n" script
+      Remove -> printf "Remove using %s...\n" script
     callProcess script []
   InvokeOn BuildMode -> do
     -- It would be great to log to journal, but eh.. not needed anyway.
-    logger "Build through script %s..." script
+    printf "Build through script %s...\n" script
     callProcess script []
   InvokeOn RunMode -> pure () -- Services call the scripts, instead.
 
@@ -151,10 +151,10 @@ setupEnvironment dirs@MkDirectories{..} ManageEnv{..} mode = for_ (M.toList $ en
 prepareDirectory :: Directories -> ManageEnv -> Context a -> IO ()
 prepareDirectory MkDirectories{..} ManageEnv{..} = \case
   Custom Install -> do
-    logger "Preparing profile directories..."
+    printf "Preparing profile directories...\n"
     traverse_ (createDirectoryIfMissing True) [dataDir, cacheDir]
   Custom Remove -> do
-    logger "Removing profile directories..."
+    printf "Removing profile directories...\n"
     traverse_ removePathForcibly [dataDir, cacheDir]
   InvokeOn _ -> pure ()
 
@@ -164,31 +164,31 @@ handleService ProfileSpec{..} dirs@MkDirectories{..} ManageEnv{..} = \case
     createDirectoryIfMissing True serviceDir
   --
   Custom Remove -> do
-    logger "Removing systemd services..."
+    printf "Removing systemd services...\n"
     traverse_ removeService (runService : otherServices)
   --
   InvokeOn BuildMode -> do
     -- Install on build to allow frequent changes of services
-    logger "Installing systemd services..."
+    printf "Installing systemd services...\n"
     traverse_ setupService (runService : otherServices)
     callProcess "systemctl" ["--user", "daemon-reload"]
-    logger "Systemd user daemon reloaded."
+    printf "Systemd user daemon reloaded.\n"
   --
   InvokeOn RunMode -> do
-    logger "Run through service %s..." (serviceNameOf runService)
+    printf "Run through service %s..." (serviceNameOf runService)
     callProcess "systemctl" ["--user", "start", "--wait", serviceNameOf runService]
   where
     -- Setup service based on "template" at the path.
     setupService templatePath = do
       let serviceName = serviceNameOf templatePath
-      logger "Service %s being installed." serviceName
+      printf "Service %s being installed.\n" serviceName
       template <- T.readFile (cfgDir </> templatePath) >>= parseShellString serviceName
       service <- shellExpandWith (readEnv . T.unpack) template
       T.writeFile (serviceDir </> serviceName) service
 
     removeService templatePath = do
       let serviceName = serviceNameOf templatePath
-      logger "Service %s being removed." serviceName
+      printf "Service %s being removed.\n" serviceName
       removeFile (serviceDir </> serviceName)
 
     serviceNameOf templatePath = snd (splitFileName templatePath)
@@ -196,19 +196,19 @@ handleService ProfileSpec{..} dirs@MkDirectories{..} ManageEnv{..} = \case
     serviceEnvs = M.insert "HOME" home $ environments dirs
     readEnv envName = case serviceEnvs M.!? envName of
       Just val -> pure (T.pack val)
-      Nothing -> fail $ printf "Environment variable %s not found" envName
+      Nothing -> fail $ printf "Environment variable %s not found." envName
 
 prepareSession :: ProfileSpec -> Directories -> ManageEnv -> Context a -> IO ()
 prepareSession ProfileSpec{..} MkDirectories{..} ManageEnv{..} = \case
   Custom Install -> do
-    logger "Installing xsession desktop entry..."
+    printf "Installing xsession desktop entry...\n"
     template <- T.readFile desktopTemplatePath >>= parseShellString "desktop entry template"
     desktopEntry <- shellExpandWith (readEnv . T.unpack) template
     T.writeFile intermediatePath desktopEntry
     -- Instead of linking, we copy the runner. Fixes issues with SDDM.
     callProcess "sudo" ["cp", "-T", intermediatePath, sessionPath]
   Custom Remove -> do
-    logger "Removing xsession runner..."
+    printf "Removing xsession runner...\n"
     callProcess "sudo" ["rm", "-f", sessionPath]
   InvokeOn _ -> pure () -- Session is not something to invoke
   where

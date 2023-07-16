@@ -4,9 +4,14 @@ cd "$( dirname "$0" )" || exit
 
 # Make it as a temporary file
 tmpdir=$( mktemp -d "${TMPDIR:-/tmp/}$(basename "$0").XXXXXXXXXXXX" )
-trap "rm -rf $tmpdir" EXIT # Want to expand it here
+trap "rm -rf $tmpdir" EXIT # $tmpdir should be expanded here
 
 # Statically built for consistency
-cabal install "exe:xmonad-manage" --disable-executable-dynamic --install-method=copy --installdir="$tmpdir"
-echo ""
-"$tmpdir"/xmonad-manage update
+cabal install "exe:xmonad-manage" --overwrite-policy=always \
+  --disable-executable-dynamic --install-method=copy --installdir="$tmpdir"
+
+# Install directory is /opt/bin
+echo "Installing to /opt/bin/xmonad-manage..."
+sudo mkdir -p /opt/bin
+sudo mv "$tmpdir/xmonad-manage" /opt/bin
+echo "Done."

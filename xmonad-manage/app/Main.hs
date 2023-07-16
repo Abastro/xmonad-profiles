@@ -38,8 +38,7 @@ import X11
 -- TODO Further adopt XDG Directory
 
 data Action
-  = Update
-  | ResetSave
+  = ResetSave
   | Setup InstallCond
   | ListProf
   | InstallProf FilePath InstallCond
@@ -54,10 +53,7 @@ manageOpts :: Opts.ParserInfo Action
 manageOpts =
   (`Opts.info` Opts.fullDesc) . (Opts.simpleVersioner version <*>) . (Opts.helper <*>) . Opts.hsubparser $
     mconcat
-      [ Opts.command "update" $
-          Opts.info (pure Update) $
-            Opts.progDesc "Updates xmonad-manage from source."
-      , Opts.command "reset-save" $
+      [ Opts.command "reset-save" $
           Opts.info (pure ResetSave) $
             Opts.progDesc "Resets xmonad-manage save for when it is corrupted."
       , Opts.command "setup" $
@@ -96,13 +92,10 @@ manageOpts =
 main :: IO ()
 main = (`catch` handleError) $ do
   hSetBuffering stdout LineBuffering -- For consistent line buffering
-  cmdLine <- unwords <$> getArgs
   home <- getHomeDirectory
 
   ManageSaved{managePath = envPath, profiles} <- get varMS
-  let logger str = printf (printf "[%s] %s\n" cmdLine str)
-      mEnv = ManageEnv{..}
-  Opts.customExecParser optPrefs manageOpts >>= handleOption mEnv profiles
+  Opts.customExecParser optPrefs manageOpts >>= handleOption ManageEnv{..} profiles
   where
     -- MAYBE Do these need to be here?
     handleError = \case
@@ -120,36 +113,19 @@ main = (`catch` handleError) $ do
 
 handleOption :: ManageEnv -> M.Map ID FilePath -> Action -> IO ()
 handleOption mEnv@ManageEnv{..} profiles = \case
-  Update -> region "Updating..." "Updated." $ withCurrentDirectory envPath $ do
-    withTemporaryDirectory $ \tmpDir -> do
-      -- To install into /opt/bin, build into temporary directory and then move it.
-      callProcess
-        "cabal"
-        [ "install"
-        , "exe:xmonad-manage"
-        , "--overwrite-policy=always"
-        , "--disable-executable-dynamic"
-        , "--install-method=copy"
-        , "--installdir=" <> tmpDir
-        ]
-      callProcess "sudo" ["mkdir", "-p", thisInstallDirectory]
-      callProcess "sudo" ["mv", tmpDir </> "xmonad-manage", thisInstallDirectory]
-    -- In case it is updated, need to reset!
-    get varMS
-
   -- Resets the save if corrupted
   ResetSave -> do
-    logger "*** Resetting save, data could be lost! ***"
+    putStrLn "*** Resetting save, data could be lost! ***"
     restoreMS
-    logger "Save reset."
+    putStrLn "Save reset."
 
   -- Main installation
-  Setup installCond -> beginEnd $ do
+  Setup installCond -> do
     activeCfg <- loadActiveCfg mEnv
 
-    logger "Active modules to install:"
+    putStrLn "Active modules to install:"
     activeModuleData mEnv activeCfg >>= printActive
-    logger "Proceed? (Ctrl+C to cancel)"
+    putStrLn "Proceed? (Ctrl+C to cancel)"
     _ <- getLine
 
     modules <- activeModules mEnv loadX11Module activeCfg
@@ -157,16 +133,16 @@ handleOption mEnv@ManageEnv{..} profiles = \case
     distro <- findDistro mEnv
     install mEnv pkgDb distro installCond (mconcat modules)
 
-    logger "Installing xmonad-manage service..."
+    putStrLn "Installing xmonad-manage service..."
     serviceDir <- getServiceDirectory GlobalService
     callProcess "sudo" ["cp", envPath </> "database" </> "xmonad-manage@.service", serviceDir]
-    logger "Service installed at %s." (serviceDir </> "xmonad-manage@.service")
+    printf "Service installed at %s.\n" (serviceDir </> "xmonad-manage@.service")
     callProcess "systemctl" ["--user", "daemon-reload"]
-    logger "Systemd user daemon reloaded."
+    putStrLn "Systemd user daemon reloaded."
 
   -- Lists installed profiles
   ListProf -> do
-    logger "Available profiles:"
+    putStrLn "Available profiles:"
     for_ (M.elems profiles) $ \cfgPath -> do
       ProfileSpec{..} <- readProfileSpec cfgPath
       printf "- %s (%s)\n" (idStr profileID) profileProps.profileName
@@ -174,7 +150,7 @@ handleOption mEnv@ManageEnv{..} profiles = \case
       printf "    %s\n" profileProps.profileDetails
 
   -- Profile-specific installation
-  InstallProf rawPath installCond -> beginEnd $ do
+  InstallProf rawPath installCond -> do
     cfgPath <- canonicalizePath rawPath
     pkgDb <- getDatabase mEnv
     distro <- findDistro mEnv
@@ -184,7 +160,7 @@ handleOption mEnv@ManageEnv{..} profiles = \case
     varMS $~ \saved@ManageSaved{profiles} -> saved{profiles = addProfile profiles}
 
   -- Remove a profile
-  RemoveProf ident -> beginEnd $ do
+  RemoveProf ident -> do
     cfgPath <- getProfile ident
     -- Does not care about profile's own ID
     (profile, _) <- loadProfile mEnv cfgPath
@@ -193,27 +169,23 @@ handleOption mEnv@ManageEnv{..} profiles = \case
     varMS $~ \saved@ManageSaved{profiles} -> saved{profiles = rmProfile profiles}
 
   -- Manually build profile
-  BuildProf profID -> beginEnd $ withProfPath profID $ \cfgPath -> do
+  BuildProf profID -> withProfPath profID $ \cfgPath -> do
     (profile, _) <- loadProfile mEnv cfgPath
     invoke mEnv BuildMode profile
 
   -- Automatic profile run
-  RunProf profID -> region "Setup" "Exit" $ withProfPath profID $ \cfgPath -> do
+  RunProf profID -> withProfPath profID $ \cfgPath -> do
     withCurrentDirectory home $ do
       -- PATH needs updating
       updatePATH home
       modules <- activeModules mEnv loadX11Module =<< loadActiveCfg mEnv
       invoke mEnv Start (mconcat modules)
-      logger "Booting xmonad..."
+      putStrLn "Booting xmonad..."
       (profile, _) <- loadProfile mEnv cfgPath
       invoke mEnv RunMode profile
   where
     getProfile profID =
       maybe (throwIO $ ProfileNotFound profID) pure $ profiles M.!? profID
-
-    region :: String -> String -> IO a -> IO ()
-    region enter exit act = logger enter *> act *> logger exit
-    beginEnd = region "Begin" "End"
 
     withProfPath profID act = case profiles M.!? profID of
       Nothing -> throwIO (ProfileNotFound profID)
@@ -223,9 +195,9 @@ handleOption mEnv@ManageEnv{..} profiles = \case
     printActive modules = do
       for_ [minBound .. maxBound] $ \typ -> do
         case modules.typedModules M.!? typ of
-          Just mod -> logger "%s: %s" (show typ) mod.name
-          Nothing -> logger "%s: None" (show typ)
-      logger "Others: %s" $ show $ (\mod -> mod.name) <$> modules.otherModules
+          Just mod -> printf "%s: %s\n" (show typ) mod.name
+          Nothing -> printf "%s: None\n" (show typ)
+      printf "Others: %s\n" $ show $ (\mod -> mod.name) <$> modules.otherModules
 
     updatePATH :: FilePath -> IO ()
     updatePATH home = do

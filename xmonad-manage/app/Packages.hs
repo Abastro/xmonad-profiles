@@ -24,6 +24,7 @@ import Manages
 import System.Directory (findExecutable)
 import System.FilePath
 import System.Process
+import Text.Printf
 
 -- | Manager ID, could be either distribution or installation medium.
 newtype ManageID = ManageIDOf T.Text
@@ -123,7 +124,7 @@ findDistro ManageEnv{..} = do
   got <- readProcess "lsb_release" ["-i"] []
   case stripPrefix "Distributor ID:" got of
     Nothing -> do
-      logger "lsb_release failed, gave %s" got
+      printf "lsb_release failed, gave %s\n" got
       throwIO (UnknownDistro $ ManageIDOf (T.pack "invalid"))
     Just distro -> pure (ManageIDOf . T.strip $ T.pack distro)
 
@@ -152,7 +153,7 @@ installPackages mEnv@ManageEnv{..} AsPkgDatabase{..} distro cond deps = do
 
   -- Then, installs the packages.
   let installFor (ManagerOf _ installer) = installPkgsWith mEnv installer cond
-  zipWithM_ installFor managers installTargets -- MAYBE This is fragile
+  zipWithM_ installFor managers installTargets -- ? Maybe This is fragile
   where
     depSet = S.fromList deps
     originDistro = fromMaybe distro (derivatives M.!? distro)
@@ -169,20 +170,20 @@ packageNameOn manageID (AsPackage pkgID) pkgInfo = case pkgInfo.naming of
 
 installPkgsWith :: ManageEnv -> Installer -> InstallCond -> M.Map Package (PkgInfo, T.Text) -> IO ()
 installPkgsWith ManageEnv{..} InstallerOf{..} cond pkgs = do
-  logger "Installing with: %s %s" (T.unpack instName) (T.unpack argInstall)
+  printf "Installing with: %s %s\n" (T.unpack instName) (T.unpack argInstall)
   case cond of
     WhenAbsent -> do
       (existing, needed) <- M.mapEither id <$> traverse (uncurry $ flip detectInstalled) pkgs
       let targets = M.elems needed
-      logger "Already installed packages: %s" (show . map packageName $ M.keys existing)
+      printf "Already installed packages: %s\n" (show . map packageName $ M.keys existing)
       installPkgs targets
     AlwaysInstall -> do
-      logger "NOTE: always-install option specified, installation includes preexisting packages."
+      printf "NOTE: always-install option specified, installation includes preexisting packages.\n"
       installPkgs (snd <$> M.elems pkgs)
   where
-    installPkgs [] = logger "All dependencies are installed."
+    installPkgs [] = printf "All dependencies are installed.\n"
     installPkgs targets = do
-      logger "Installing dependencies %s..." (show targets)
+      printf "Installing dependencies %s...\n" (show targets)
       if needRoot
         then callProcess "sudo" (map T.unpack $ instName : argInstall : targets)
         else callProcess (T.unpack instName) (map T.unpack $ argInstall : targets)

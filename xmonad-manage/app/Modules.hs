@@ -24,6 +24,7 @@ import Manages
 import Packages
 import System.FilePath
 import System.Process
+import Text.Printf
 
 -- TODO Proper builtins & More flexibility (e.g. necessary module?)
 
@@ -93,7 +94,7 @@ loadActiveCfg mEnv@ManageEnv{..} = loadConfig mEnv "active-modules.yaml" readCfg
     verifyType typ modulePath = do
       ModuleSpec{..} <- readModuleSpec (canonPath mEnv modulePath)
       unless (moduleType == Just typ) $ do
-        logger "Module %s is specified for type %s, yet it has type %s." name (show typ) (show moduleType)
+        printf "Module %s is specified for type %s, yet it has type %s.\n" name (show typ) (show moduleType)
         fail "Wrong module for the type."
       pure modulePath
 
@@ -157,22 +158,22 @@ moduleForSpec moduleDir ModuleSpec{..} = deps <> setupEnv <> scripts
 executeScript :: T.Text -> ManageEnv -> FilePath -> Context ModuleMode -> IO ()
 executeScript name ManageEnv{..} script = \case
   Custom Install -> do
-    logger "[%s] Module installation using %s..." name script
+    printf "[%s] Module installation using %s...\n" name script
     callProcess script []
   Custom Remove -> pure ()
   InvokeOn Start -> do
-    logger "[%s] Setting up using %s..." name script
+    printf "[%s] Setting up using %s...\n" name script
     callProcess script []
-    logger "[%s] Setup complete." name
+    printf "[%s] Setup complete.\n" name
 
 setupEnvironment :: T.Text -> M.Map T.Text ShellString -> ManageEnv -> Context ModuleMode -> IO ()
 setupEnvironment name environment ManageEnv{..} = \case
   Custom Install -> do
-    logger "[%s] Checking shell expansions..." name
-    forInEnv (logger "[Env] %s=%s")
+    printf "[%s] Checking shell expansions...\n" name
+    forInEnv (printf "[Env] %s=%s\n")
   Custom Remove -> pure ()
   InvokeOn Start -> do
-    logger "[%s] Setting up..." name
+    printf "[%s] Setting up...\n" name
     forInEnv setServiceEnv
   where
     forInEnv act = for_ (M.toList environment) $ \(key, str) -> do
