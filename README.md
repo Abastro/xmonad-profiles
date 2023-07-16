@@ -1,6 +1,6 @@
 # Xmonad profile manager for Gnome
 
-More easily manageable xmonad profiles on Ubuntu.
+More easily manageable xmonad profiles, now supporting both Ubuntu and Arch.
 
 NB: Only works for the listed submodules.
 
@@ -17,13 +17,13 @@ Procedure:
 2. `cd xmonad-profiles` to get into the repo directory.
 3. Run `./install.sh` to install `xmonad-manage`
     * Likely requires granting executable permission.
-    * Adds `xmonad-manage` executable `$HOME/.cabal/bin`. This might change in near future.
+    * Adds `xmonad-manage` executable `/opt/bin`. This might change in near future.
 4. Run `xmonad-manage setup` to install required components.
 5. Run `xmonad-manage install <profile-path>` to install the specified profile.
     * Currently supported profiles: `pulpmonad`, `xmonad-test`
 
 This procedure automatically installs profiles in `/usr/share/xsessions/`,
-which you can select from login screen.
+which you can select from the login screen.
 
 ## XMonad-Manage
 
@@ -41,4 +41,4 @@ Run `xmonad-manage` to check further details.
 NB: Removal method is not yet supported; this is due to `cabal` lacking uninstall/gc methods.
 
 If you don't mind nuking the haskell stores, you can remove the `xmonad-profiles` directory and `$HOME/.ghcup`, `$HOME/.cabal` to do the cleanup.
-- Added: Also need to clean up `XDG_DATA_DIR/xmonad-manage`, but this folder contains a single small text data file.
+- You might also want to clean up `${XDG_DATA_DIR}/xmonad-manage`, which contains small data files.

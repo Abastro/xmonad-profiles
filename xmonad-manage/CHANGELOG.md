@@ -1,7 +1,7 @@
 # Changelog
 
 ## master
-- **! Recommends re-installing your profile !**
+- **! Recommends running `xmonad-manage setup` and re-installing your profile !**
 - Xmonad-manage is now installed in `/opt/bin`.
 - Xmonad-manage now runs as a systemd service.
 
