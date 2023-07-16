@@ -222,6 +222,7 @@ handleOption mEnv@ManageEnv{..} profiles = \case
 
     updatePATH :: FilePath -> IO ()
     updatePATH home = do
+      putStrLn "Updating path..."
       path <- getEnv "PATH"
       -- Blame ghcup for not putting environment inside .profile, duh
       -- ? Maybe check if these are added in PATH beforehand
