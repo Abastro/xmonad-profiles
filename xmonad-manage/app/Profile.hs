@@ -88,7 +88,7 @@ profileDeskEntry ProfileSpec{..} startPath =
 loadProfile :: ManageEnv -> FilePath -> IO (Component ProfileMode, ID)
 loadProfile mEnv@ManageEnv{..} cfgDir = do
   spec@ProfileSpec{profileID} <- readProfileSpec cfgDir
-  serviceDir <- getXdgDirectory XdgConfig "systemd"
+  serviceDir <- (</> "user") <$> getXdgDirectory XdgConfig "systemd"
   pure $ profileForSpec mEnv (dirsOf profileID serviceDir) spec
   where
     locFor ident str = envPath </> str </> idStr ident
@@ -203,7 +203,6 @@ handleService ProfileSpec{..} dirs@MkDirectories{..} ManageEnv{..} = \case
       removeFile (serviceDir </> serviceName)
 
     serviceNameOf templatePath = snd (splitFileName templatePath)
-    -- serviceDir = home </> ".config" </> "systemd" </> "user"
 
     serviceEnvs = M.insert "HOME" home $ environments dirs
     readEnv envName = case serviceEnvs M.!? envName of
