@@ -81,7 +81,7 @@ instance FromYAML ActiveModules where
       ModuleSetOf <$> (m .: "typed-modules") <*> (m .:? "other-modules" .!= [])
 
 loadActiveCfg :: ManageEnv -> IO (ModuleSet ModulePath)
-loadActiveCfg mEnv@ManageEnv{..} = loadConfig mEnv "active-modules.yaml" readCfg
+loadActiveCfg mEnv = loadConfig mEnv "active-modules.yaml" readCfg
   where
     readCfg path = do
       ActiveModules{..} <- readYAMLFile userError path
@@ -99,7 +99,7 @@ loadActiveCfg mEnv@ManageEnv{..} = loadConfig mEnv "active-modules.yaml" readCfg
       pure modulePath
 
 canonPath :: ManageEnv -> ModulePath -> FilePath
-canonPath ManageEnv{..} = \case
+canonPath ManageEnv{envPath} = \case
   BuiltIn ident -> envPath </> "modules" </> ident
   External path -> path
 
@@ -140,41 +140,41 @@ loadModule :: FilePath -> IO (Component ModuleMode)
 loadModule moduleDir = moduleForSpec moduleDir <$> readModuleSpec moduleDir
 
 moduleForSpec :: FilePath -> ModuleSpec -> Component ModuleMode
-moduleForSpec moduleDir ModuleSpec{..} = deps <> setupEnv <> scripts
+moduleForSpec moduleDir spec = deps <> setupEnv <> scripts
   where
-    deps = ofDependencies dependencies
+    deps = ofDependencies spec.dependencies
     scripts =
       fromScript
-        (executeScript name)
+        (executeScript spec)
         ( \case
-            Install -> scriptFor <$> install
+            Install -> scriptFor <$> spec.install
             Remove -> Nothing
         )
-        (\Start -> scriptFor run)
-    setupEnv = ofHandle (setupEnvironment name environment)
+        (\Start -> scriptFor spec.run)
+    setupEnv = ofHandle (setupEnvironment spec)
     scriptFor path = moduleDir </> path
 
-executeScript :: T.Text -> ManageEnv -> FilePath -> Context ModuleMode -> IO ()
-executeScript name ManageEnv{..} script = \case
+executeScript :: ModuleSpec -> ManageEnv -> FilePath -> Context ModuleMode -> IO ()
+executeScript spec _ script = \case
   Custom Install -> do
-    printf "[%s] Module installation using %s...\n" name script
+    printf "[%s] Module installation using %s...\n" spec.name script
     callProcess script []
   Custom Remove -> pure ()
   InvokeOn Start -> do
-    printf "[%s] Setting up using %s...\n" name script
+    printf "[%s] Setting up using %s...\n" spec.name script
     callProcess script []
-    printf "[%s] Setup complete.\n" name
+    printf "[%s] Setup complete.\n" spec.name
 
-setupEnvironment :: T.Text -> M.Map T.Text ShellString -> ManageEnv -> Context ModuleMode -> IO ()
-setupEnvironment name environment ManageEnv{..} = \case
+setupEnvironment :: ModuleSpec -> ManageEnv -> Context ModuleMode -> IO ()
+setupEnvironment spec _ = \case
   Custom Install -> do
-    printf "[%s] Checking shell expansions...\n" name
+    printf "[%s] Checking shell expansions...\n" spec.name
     forInEnv (printf "[Env] %s=%s\n")
   Custom Remove -> pure ()
   InvokeOn Start -> do
-    printf "[%s] Setting up...\n" name
+    printf "[%s] Setting up...\n" spec.name
     forInEnv setServiceEnv
   where
-    forInEnv act = for_ (M.toList environment) $ \(key, str) -> do
+    forInEnv act = for_ (M.toList spec.environment) $ \(key, str) -> do
       formatted <- shellExpand str
       act (T.unpack key) (T.unpack formatted)

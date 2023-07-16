@@ -8,6 +8,7 @@ module Component (
   invoke,
   fromScript,
   ofHandle,
+  ofAction,
   ofDependencies,
 ) where
 
@@ -25,6 +26,8 @@ data Context mode = Custom SetupPhase | InvokeOn mode
 -- | A unit of installation. Can be conveniently merged.
 --
 -- When merged, former component is executed first.
+--
+-- Also implements Applicative and Category as well to make piping possible.
 data ComponentCat mode env a = MkComponent
   { dependencies :: [Package]
   , handle :: env -> Context mode -> IO a
@@ -89,19 +92,25 @@ fromScript ::
   (SetupPhase -> Maybe FilePath) ->
   (mode -> FilePath) ->
   ComponentCat mode env ()
-fromScript executor setupScripts invokeScripts = ofHandle $ \mEnv -> \case
-  Custom phase -> do
-    case phase of
-      Install -> for_ [minBound .. maxBound] $ \mode -> setToExecutable (invokeScripts mode)
-      Remove -> pure ()
-    for_ (setupScripts phase) $ \setup -> do
-      setToExecutable setup
-      executor mEnv setup (Custom Install)
-  InvokeOn ctxt -> do
-    executor mEnv (invokeScripts ctxt) (InvokeOn ctxt)
+fromScript executor setupScripts invokeScripts = withSetupScripts <> withInvokeScripts
+  where
+    withSetupScripts = ofHandle $ \env -> \case
+      -- Needs to be executable
+      Custom phase -> for_ (setupScripts phase) $ \setup -> do
+        setToExecutable setup
+        executor env setup (Custom phase)
+      InvokeOn _ -> pure ()
+    withInvokeScripts = ofHandle $ \env -> \case
+      -- Needs to be executable
+      Custom Install -> for_ [minBound .. maxBound] $ \mode -> setToExecutable (invokeScripts mode)
+      Custom Remove -> pure ()
+      InvokeOn mode -> executor env (invokeScripts mode) (InvokeOn mode)
 
 ofHandle :: (env -> Context mode -> IO a) -> ComponentCat mode env a
 ofHandle handle = MkComponent{dependencies = [], handle}
+
+ofAction :: (env -> IO a) -> ComponentCat mode env a
+ofAction action = ofHandle $ \env _ -> action env
 
 ofDependencies :: [Package] -> ComponentCat mode env ()
 ofDependencies dependencies = MkComponent{dependencies, handle = mempty}

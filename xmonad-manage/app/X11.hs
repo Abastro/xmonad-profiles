@@ -86,8 +86,10 @@ xsettingsText cfg = T.unlines $ do
       SetInt i -> T.pack (show i)
       SetText txt -> "\"" <> txt <> "\""
 
+data ThisEnv = ThisEnv !ManageEnv !DisplayConfig !FilePath
+
 x11Module :: Component ModuleMode
-x11Module = xmonadDeps <> xresources <> (xsettingsd . getXsettingsDir) <> xsetup
+x11Module = xmonadDeps <> (readConfigs >>> xresources <> xsettingsd) <> xsetup
   where
     xmonadDeps = ofDependencies [AsPackage "libxss", AsPackage "xmonad"]
     xresources = ofHandle handleXresources
@@ -101,27 +103,26 @@ x11Module = xmonadDeps <> xresources <> (xsettingsd . getXsettingsDir) <> xsetup
               callProcess "xsetroot" ["-cursor_name", "left_ptr"]
             _ -> pure ()
         }
-    getXsettingsDir = ofHandle $ \mEnv _ -> (mEnv, ) <$> getXdgDirectory XdgConfig "xsettingsd"
+    readConfigs = ofHandle $ \mEnv _ -> do
+      ThisEnv mEnv <$> loadDisplayCfg mEnv <*> getXdgDirectory XdgConfig "xsettingsd"
 
-handleXresources :: ManageEnv -> Context ModuleMode -> IO ()
-handleXresources mEnv@ManageEnv{..} = \case
+handleXresources :: ThisEnv -> Context ModuleMode -> IO ()
+handleXresources (ThisEnv mEnv displayCfg _) = \case
   Custom Install -> do
     printf "[X11] Installing X-resources...\n"
-    displayCfg <- loadDisplayCfg mEnv
-    T.writeFile (xresourcesPath home) $ xresourcesText (xresourcesCfg displayCfg)
+    T.writeFile xresourcesPath $ xresourcesText (xresourcesCfg displayCfg)
   Custom Remove -> do
-    printf "You may remove installed X-resources config %s.\n" (xresourcesPath home)
+    printf "You may remove installed X-resources config %s.\n" xresourcesPath
   InvokeOn Start -> do
     printf "[X11] Reflect X-resources.\n"
-    callProcess "xrdb" ["-merge", xresourcesPath home]
+    callProcess "xrdb" ["-merge", xresourcesPath]
   where
-    xresourcesPath home = home </> ".Xresources"
+    xresourcesPath = mEnv.home </> ".Xresources"
 
-handleXsettings :: (ManageEnv, FilePath) -> Context ModuleMode -> IO ()
-handleXsettings (mEnv@ManageEnv{..}, xsettingsDir) = \case
+handleXsettings :: ThisEnv -> Context ModuleMode -> IO ()
+handleXsettings (ThisEnv _ displayCfg xsettingsDir) = \case
   Custom Install -> do
     printf "[X11] Installing X settings...\n"
-    displayCfg <- loadDisplayCfg mEnv
     -- Need to create folder first
     createDirectoryIfMissing False xsettingsDir
     T.writeFile (xsettingsDir </> "xsettingsd.conf") $ xsettingsText (xsettingsConf displayCfg)
@@ -133,7 +134,6 @@ handleXsettings (mEnv@ManageEnv{..}, xsettingsDir) = \case
     printf "[X11] Running XSettingsd for X settings.\n"
     _ <- spawnProcess "xsettingsd" []
     -- Workaround for GTK4 apps reaching for GTK_THEME.
-    DisplayConfig{theme} <- loadDisplayCfg mEnv
-    setServiceEnv "GTK_THEME" (T.unpack theme)
+    setServiceEnv "GTK_THEME" (T.unpack displayCfg.theme)
     setServiceEnv "QT_AUTO_SCREEN_SCALE_FACTOR" "1" -- HiDPI Scales for QT
     setServiceEnv "QT_QPA_PLATFORMTHEME" "qt5ct"

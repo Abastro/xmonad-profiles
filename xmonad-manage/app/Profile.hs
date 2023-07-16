@@ -69,49 +69,45 @@ wrapIOError cfgDir = handle @IOError (throwIO . ProfileIOError cfgDir)
 data ProfileMode = BuildMode | RunMode
   deriving (Show, Eq, Enum, Bounded)
 
--- serviceDir is not specific to the config, but this does make things convenient.
-data Directories = MkDirectories {cfgDir, dataDir, cacheDir, logDir, serviceDir :: !FilePath}
+data Directories = MkDirectories
+  { configDir, dataDir, cacheDir, logDir, serviceDir, databaseDir :: !FilePath
+  }
   deriving (Show)
 
--- Load profile with the ID.
+-- | Load profile with its ID.
 loadProfile :: ManageEnv -> FilePath -> IO (Component ProfileMode, ID)
-loadProfile mEnv@ManageEnv{..} cfgDir = do
-  spec@ProfileSpec{profileID} <- readProfileSpec cfgDir
-  serviceDir <- getServiceDirectory PerUserService
-  pure $ profileForSpec mEnv (dirsOf profileID serviceDir) spec
-  where
-    locFor ident str = envPath </> str </> idStr ident
-    dirsOf profileID serviceDir =
-      MkDirectories
-        { cfgDir = cfgDir
-        , dataDir = locFor profileID "data"
-        , cacheDir = locFor profileID "cache"
-        , logDir = locFor profileID "logs"
-        , serviceDir
-        }
+loadProfile mEnv@ManageEnv{..} configDir = do
+  spec <- readProfileSpec configDir
+  pure (profileForSpec mEnv configDir spec, spec.profileID)
 
-profileForSpec :: ManageEnv -> Directories -> ProfileSpec -> (Component ProfileMode, ID)
-profileForSpec ManageEnv{..} dirs@MkDirectories{..} cfg@ProfileSpec{..} = (profile, profileID)
+profileForSpec :: ManageEnv -> FilePath -> ProfileSpec -> Component ProfileMode
+profileForSpec ManageEnv{..} configDir spec = profile
   where
-    profile = deps <> prepDirectory <> prepSession <> setupEnv <> useService <> scripts <> buildOnInstall
-    deps = ofDependencies dependencies
+    profile =
+      mconcat
+        [ ofDependencies spec.dependencies
+        , ofAction (getDirectories configDir spec)
+            >>> mconcat
+              [ ofHandle prepareProfileDirs
+              , ofHandle (prepareSession spec)
+              , ofHandle setupEnvironment
+              , ofHandle (handleService spec)
+              ]
+        , scripts
+        , buildOnInstall
+        ]
     scripts =
       fromScript
         executeScript
         ( \case
-            Install -> cfgFor <$> installScript
+            Install -> cfgFor <$> spec.installScript
             Remove -> Nothing
         )
         ( \case
-            BuildMode -> cfgFor buildScript
-            RunMode -> cfgFor runService
+            BuildMode -> cfgFor spec.buildScript
+            RunMode -> cfgFor spec.runService
         )
-    cfgFor path = cfgDir </> path
-
-    setupEnv = ofHandle $ setupEnvironment dirs
-    useService = ofHandle $ handleService cfg dirs
-    prepDirectory = ofHandle $ prepareDirectory dirs
-    prepSession = ofHandle $ prepareSession cfg dirs
+    cfgFor path = configDir </> path
     -- Installation should finish with building the profile.
     buildOnInstall = ofHandle $ \mEnv -> \case
       Custom Install -> invoke mEnv BuildMode profile
@@ -119,7 +115,7 @@ profileForSpec ManageEnv{..} dirs@MkDirectories{..} cfg@ProfileSpec{..} = (profi
 
 -- | Executes the respective script, case-by-case basis since given args could be changed.
 executeScript :: ManageEnv -> FilePath -> Context ProfileMode -> IO ()
-executeScript ManageEnv{..} script = \case
+executeScript _ script = \case
   Custom phase -> do
     case phase of
       Install -> printf "Install using %s...\n" script
@@ -136,20 +132,27 @@ environments MkDirectories{..} =
   M.fromList
     [ ("XMONAD_NAME", "xmonad-" <> arch <> "-" <> os)
     , ("XMONAD_DATA_DIR", dataDir)
-    , ("XMONAD_CONFIG_DIR", cfgDir)
+    , ("XMONAD_CONFIG_DIR", configDir)
     , ("XMONAD_CACHE_DIR", cacheDir)
     , ("XMONAD_LOG_DIR", logDir)
     ]
 
-setupEnvironment :: Directories -> ManageEnv -> Context ProfileMode -> IO ()
-setupEnvironment dirs@MkDirectories{..} ManageEnv{..} mode = for_ (M.toList $ environments dirs) (uncurry putEnv)
-  where
-    putEnv = case mode of
-      InvokeOn RunMode -> setServiceEnv
-      _ -> setEnv
+getDirectories :: FilePath -> ProfileSpec -> ManageEnv -> IO Directories
+getDirectories configDir spec mEnv = do
+  serviceDir <- getServiceDirectory PerUserService
+  let locFor str = mEnv.envPath </> str </> idStr spec.profileID
+  pure
+    MkDirectories
+      { configDir
+      , dataDir = locFor "data"
+      , cacheDir = locFor "cache"
+      , logDir = locFor "logs"
+      , serviceDir
+      , databaseDir = mEnv.envPath </> "database"
+      }
 
-prepareDirectory :: Directories -> ManageEnv -> Context a -> IO ()
-prepareDirectory MkDirectories{..} ManageEnv{..} = \case
+prepareProfileDirs :: Directories -> Context a -> IO ()
+prepareProfileDirs MkDirectories{..} = \case
   Custom Install -> do
     printf "Preparing profile directories...\n"
     traverse_ (createDirectoryIfMissing True) [dataDir, cacheDir]
@@ -158,8 +161,43 @@ prepareDirectory MkDirectories{..} ManageEnv{..} = \case
     traverse_ removePathForcibly [dataDir, cacheDir]
   InvokeOn _ -> pure ()
 
-handleService :: ProfileSpec -> Directories -> ManageEnv -> Context ProfileMode -> IO ()
-handleService ProfileSpec{..} dirs@MkDirectories{..} ManageEnv{..} = \case
+setupEnvironment :: Directories -> Context ProfileMode -> IO ()
+setupEnvironment dirs mode = for_ (M.toList $ environments dirs) (uncurry putEnv)
+  where
+    putEnv = case mode of
+      InvokeOn RunMode -> setServiceEnv
+      _ -> setEnv
+
+prepareSession :: ProfileSpec -> Directories -> Context a -> IO ()
+prepareSession ProfileSpec{..} MkDirectories{..} = \case
+  Custom Install -> do
+    printf "Installing xsession desktop entry...\n"
+    template <- T.readFile desktopTemplatePath >>= parseShellString "desktop entry template"
+    desktopEntry <- shellExpandWith (readEnv . T.unpack) template
+    T.writeFile intermediatePath desktopEntry
+    -- Instead of linking, we copy the runner. Fixes issues with SDDM.
+    callProcess "sudo" ["cp", "-T", intermediatePath, sessionPath]
+  Custom Remove -> do
+    printf "Removing xsession runner...\n"
+    callProcess "sudo" ["rm", "-f", sessionPath]
+  InvokeOn _ -> pure () -- Session is not something to invoke
+  where
+    desktopTemplatePath = databaseDir </> "template" <.> "desktop"
+    sessionPath = "/usr" </> "share" </> "xsessions" </> idStr profileID <.> "desktop"
+    intermediatePath = dataDir </> "run" <.> "desktop"
+
+    profileEnv =
+      M.fromList
+        [ ("PROFILE_ID", T.pack $ idStr profileID)
+        , ("PROFILE_NAME", profileProps.profileName)
+        , ("PROFILE_DETAILS", profileProps.profileDetails)
+        ]
+    readEnv envName = case profileEnv M.!? envName of
+      Just val -> pure val
+      Nothing -> fail $ printf "Profile variable %s not found" envName
+
+handleService :: ProfileSpec -> Directories -> Context ProfileMode -> IO ()
+handleService ProfileSpec{..} dirs@MkDirectories{..} = \case
   Custom Install -> do
     createDirectoryIfMissing True serviceDir
   --
@@ -182,7 +220,7 @@ handleService ProfileSpec{..} dirs@MkDirectories{..} ManageEnv{..} = \case
     setupService templatePath = do
       let serviceName = serviceNameOf templatePath
       printf "Service %s being installed.\n" serviceName
-      template <- T.readFile (cfgDir </> templatePath) >>= parseShellString serviceName
+      template <- T.readFile (configDir </> templatePath) >>= parseShellString serviceName
       service <- shellExpandWith (readEnv . T.unpack) template
       T.writeFile (serviceDir </> serviceName) service
 
@@ -193,35 +231,7 @@ handleService ProfileSpec{..} dirs@MkDirectories{..} ManageEnv{..} = \case
 
     serviceNameOf templatePath = snd (splitFileName templatePath)
 
-    serviceEnvs = M.insert "HOME" home $ environments dirs
+    serviceEnvs = environments dirs
     readEnv envName = case serviceEnvs M.!? envName of
       Just val -> pure (T.pack val)
       Nothing -> fail $ printf "Environment variable %s not found." envName
-
-prepareSession :: ProfileSpec -> Directories -> ManageEnv -> Context a -> IO ()
-prepareSession ProfileSpec{..} MkDirectories{..} ManageEnv{..} = \case
-  Custom Install -> do
-    printf "Installing xsession desktop entry...\n"
-    template <- T.readFile desktopTemplatePath >>= parseShellString "desktop entry template"
-    desktopEntry <- shellExpandWith (readEnv . T.unpack) template
-    T.writeFile intermediatePath desktopEntry
-    -- Instead of linking, we copy the runner. Fixes issues with SDDM.
-    callProcess "sudo" ["cp", "-T", intermediatePath, sessionPath]
-  Custom Remove -> do
-    printf "Removing xsession runner...\n"
-    callProcess "sudo" ["rm", "-f", sessionPath]
-  InvokeOn _ -> pure () -- Session is not something to invoke
-  where
-    desktopTemplatePath = envPath </> "database" </> "template" <.> "desktop"
-    sessionPath = "/usr" </> "share" </> "xsessions" </> idStr profileID <.> "desktop"
-    intermediatePath = dataDir </> "run" <.> "desktop"
-
-    profileEnv =
-      M.fromList
-        [ ("PROFILE_ID", T.pack $ idStr profileID)
-        , ("PROFILE_NAME", profileProps.profileName)
-        , ("PROFILE_DETAILS", profileProps.profileDetails)
-        ]
-    readEnv envName = case profileEnv M.!? envName of
-      Just val -> pure val
-      Nothing -> fail $ printf "Profile variable %s not found" envName

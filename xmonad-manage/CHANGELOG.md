@@ -1,6 +1,8 @@
 # Changelog
 ## master
 - Removed update command, please use `./install.sh` instead.
+- Logging headers on each output/error lines are removed.
+- Service installer does not expand `${Home}` now, use `%h` instead.
 
 ## 0.7.2
 - **! Recommends running `xmonad-manage setup` and re-installing your profile !**
