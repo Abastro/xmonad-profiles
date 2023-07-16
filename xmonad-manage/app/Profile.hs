@@ -75,13 +75,13 @@ data Directories = MkDirectories
   deriving (Show)
 
 -- | Load profile with its ID.
-loadProfile :: ManageEnv -> FilePath -> IO (Component ProfileMode, ID)
-loadProfile mEnv@ManageEnv{..} configDir = do
+loadProfile :: FilePath -> IO (Component ProfileMode, ID)
+loadProfile configDir = do
   spec <- readProfileSpec configDir
-  pure (profileForSpec mEnv configDir spec, spec.profileID)
+  pure (profileForSpec configDir spec, spec.profileID)
 
-profileForSpec :: ManageEnv -> FilePath -> ProfileSpec -> Component ProfileMode
-profileForSpec ManageEnv{..} configDir spec = profile
+profileForSpec :: FilePath -> ProfileSpec -> Component ProfileMode
+profileForSpec configDir spec = profile
   where
     profile =
       mconcat
@@ -91,7 +91,7 @@ profileForSpec ManageEnv{..} configDir spec = profile
               [ ofHandle prepareProfileDirs
               , ofHandle (prepareSession spec)
               , ofHandle setupEnvironment
-              , ofHandle (handleService spec)
+              , serviceModule spec
               ]
         , scripts
         , buildOnInstall
@@ -110,7 +110,7 @@ profileForSpec ManageEnv{..} configDir spec = profile
     cfgFor path = configDir </> path
     -- Installation should finish with building the profile.
     buildOnInstall = ofHandle $ \mEnv -> \case
-      Custom Install -> invoke mEnv BuildMode profile
+      Custom Install -> invoke mEnv BuildMode profile -- (Tying the knot)
       _ -> pure ()
 
 -- | Executes the respective script, case-by-case basis since given args could be changed.
@@ -128,13 +128,13 @@ executeScript _ script = \case
   InvokeOn RunMode -> pure () -- Services call the scripts, instead.
 
 environments :: Directories -> M.Map String T.Text
-environments MkDirectories{..} =
+environments dirs =
   M.fromList
     [ ("XMONAD_NAME", T.pack $ "xmonad-" <> arch <> "-" <> os)
-    , ("XMONAD_DATA_DIR", T.pack dataDir)
-    , ("XMONAD_CONFIG_DIR", T.pack configDir)
-    , ("XMONAD_CACHE_DIR", T.pack cacheDir)
-    , ("XMONAD_LOG_DIR", T.pack logDir)
+    , ("XMONAD_DATA_DIR", T.pack dirs.dataDir)
+    , ("XMONAD_CONFIG_DIR", T.pack dirs.configDir)
+    , ("XMONAD_CACHE_DIR", T.pack dirs.cacheDir)
+    , ("XMONAD_LOG_DIR", T.pack dirs.logDir)
     ]
 
 getDirectories :: FilePath -> ProfileSpec -> ManageEnv -> IO Directories
@@ -152,24 +152,24 @@ getDirectories configDir spec mEnv = do
       }
 
 prepareProfileDirs :: Directories -> Context a -> IO ()
-prepareProfileDirs MkDirectories{..} = \case
+prepareProfileDirs dirs = \case
   Custom Install -> do
     printf "Preparing profile directories...\n"
-    traverse_ (createDirectoryIfMissing True) [dataDir, cacheDir]
+    traverse_ (createDirectoryIfMissing True) [dirs.dataDir, dirs.cacheDir]
   Custom Remove -> do
     printf "Removing profile directories...\n"
-    traverse_ removePathForcibly [dataDir, cacheDir]
+    traverse_ removePathForcibly [dirs.dataDir, dirs.cacheDir]
   InvokeOn _ -> pure ()
 
 setupEnvironment :: Directories -> Context ProfileMode -> IO ()
-setupEnvironment dirs mode = for_ (M.toList $ environments dirs) (uncurry putEnv)
+setupEnvironment dirs mode = traverse_ (uncurry putEnv) (M.toList $ environments dirs)
   where
     putEnv = case mode of
       InvokeOn RunMode -> setServiceEnv
       _ -> setNormalEnv
 
 prepareSession :: ProfileSpec -> Directories -> Context a -> IO ()
-prepareSession ProfileSpec{..} MkDirectories{..} = \case
+prepareSession ProfileSpec{..} dirs = \case
   Custom Install -> do
     printf "Installing xsession desktop entry...\n"
     template <- T.readFile desktopTemplatePath >>= parseShellString "desktop entry template"
@@ -182,9 +182,9 @@ prepareSession ProfileSpec{..} MkDirectories{..} = \case
     callProcess "sudo" ["rm", "-f", sessionPath]
   InvokeOn _ -> pure () -- Session is not something to invoke
   where
-    desktopTemplatePath = databaseDir </> "template" <.> "desktop"
+    desktopTemplatePath = dirs.databaseDir </> "template" <.> "desktop"
     sessionPath = "/usr" </> "share" </> "xsessions" </> idStr profileID <.> "desktop"
-    intermediatePath = dataDir </> "run" <.> "desktop"
+    intermediatePath = dirs.dataDir </> "run" <.> "desktop"
 
     onEnvNotFound key = fail $ printf "Profile variable %s not found" key
     profileEnv =
@@ -194,38 +194,40 @@ prepareSession ProfileSpec{..} MkDirectories{..} = \case
         , ("PROFILE_DETAILS", profileProps.profileDetails)
         ]
 
-handleService :: ProfileSpec -> Directories -> Context ProfileMode -> IO ()
-handleService ProfileSpec{..} dirs@MkDirectories{..} = \case
-  Custom Install -> do
-    createDirectoryIfMissing True serviceDir
-  --
-  Custom Remove -> do
-    printf "Removing systemd services...\n"
-    traverse_ removeService (runService : otherServices)
-  --
-  InvokeOn BuildMode -> do
-    -- Install on build to allow frequent changes of services
-    printf "Installing systemd services...\n"
-    traverse_ setupService (runService : otherServices)
-    callProcess "systemctl" ["--user", "daemon-reload"]
-    printf "Systemd user daemon reloaded.\n"
-  --
-  InvokeOn RunMode -> do
-    printf "Run through service %s..." (serviceNameOf runService)
-    callProcess "systemctl" ["--user", "start", "--wait", serviceNameOf runService]
+serviceNameOf templatePath = snd (splitFileName templatePath)
+
+serviceModule :: ProfileSpec -> ComponentCat ProfileMode Directories ()
+serviceModule spec = ofHandle declare <> installAllServices <> ofHandle apply
   where
-    -- Setup service based on "template" at the path.
-    setupService templatePath = do
-      let serviceName = serviceNameOf templatePath
-      printf "Service %s being installed.\n" serviceName
-      template <- T.readFile (configDir </> templatePath) >>= parseShellString serviceName
-      service <- shellExpandFromMap onEnvNotFound (environments dirs) template
-      T.writeFile (serviceDir </> serviceName) service
+    installAllServices = traverse_ (ofHandle . installService) (spec.runService : spec.otherServices)
 
-    removeService templatePath = do
-      let serviceName = serviceNameOf templatePath
-      printf "Service %s being removed.\n" serviceName
-      removeFile (serviceDir </> serviceName)
+    declare _ = \case
+      Custom Install -> pure ()
+      Custom Remove -> printf "Removing systemd services...\n"
+      InvokeOn BuildMode -> printf "Installing systemd services...\n"
+      InvokeOn RunMode -> printf "Run through service %s...\n" (serviceNameOf spec.runService)
 
-    serviceNameOf templatePath = snd (splitFileName templatePath)
+    apply dirs = \case
+      Custom Install -> createDirectoryIfMissing True dirs.serviceDir
+      Custom Remove -> pure ()
+      InvokeOn BuildMode -> do
+        callProcess "systemctl" ["--user", "daemon-reload"]
+        printf "Systemd user daemon reloaded.\n"
+      InvokeOn RunMode -> do
+        callProcess "systemctl" ["--user", "start", "--wait", serviceNameOf spec.runService]
+
+installService :: FilePath -> Directories -> Context ProfileMode -> IO ()
+installService templatePath dirs = \case
+  -- Install on build to allow frequent changes of services
+  InvokeOn BuildMode -> do
+    printf "Service %s being installed.\n" serviceName
+    template <- T.readFile (dirs.configDir </> templatePath) >>= parseShellString serviceName
+    service <- shellExpandFromMap onEnvNotFound (environments dirs) template
+    T.writeFile (dirs.serviceDir </> serviceName) service
+  Custom Remove -> do
+    printf "Service %s being removed.\n" serviceName
+    removeFile (dirs.serviceDir </> serviceName)
+  _ -> pure ()
+  where
+    serviceName = serviceNameOf templatePath
     onEnvNotFound key = fail $ printf "Environment variable %s not found." key

@@ -155,7 +155,7 @@ handleOption mEnv@ManageEnv{..} profiles = \case
     cfgPath <- canonicalizePath rawPath
     pkgDb <- getDatabase mEnv
     distro <- findDistro mEnv
-    (profile, ident) <- loadProfile mEnv cfgPath
+    (profile, ident) <- loadProfile cfgPath
     install mEnv pkgDb distro installCond profile
     let addProfile = M.insert ident cfgPath
     varMS $~ \saved@ManageSaved{profiles} -> saved{profiles = addProfile profiles}
@@ -164,14 +164,14 @@ handleOption mEnv@ManageEnv{..} profiles = \case
   RemoveProf ident -> do
     cfgPath <- getProfile ident
     -- Does not care about profile's own ID
-    (profile, _) <- loadProfile mEnv cfgPath
+    (profile, _) <- loadProfile cfgPath
     remove mEnv profile
     let rmProfile = M.delete ident
     varMS $~ \saved@ManageSaved{profiles} -> saved{profiles = rmProfile profiles}
 
   -- Manually build profile
   BuildProf profID -> withProfPath profID $ \cfgPath -> do
-    (profile, _) <- loadProfile mEnv cfgPath
+    (profile, _) <- loadProfile cfgPath
     invoke mEnv BuildMode profile
 
   -- Automatic profile run
@@ -182,7 +182,7 @@ handleOption mEnv@ManageEnv{..} profiles = \case
       modules <- activeModules mEnv x11Module =<< loadActiveCfg mEnv
       invoke mEnv Start (mconcat modules)
       putStrLn "Booting xmonad..."
-      (profile, _) <- loadProfile mEnv cfgPath
+      (profile, _) <- loadProfile cfgPath
       invoke mEnv RunMode profile
   where
     getProfile profID =

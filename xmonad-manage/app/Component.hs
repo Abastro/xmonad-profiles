@@ -3,6 +3,8 @@ module Component (
   Context (..),
   ComponentCat (..),
   Component,
+  traversing,
+  between,
   install,
   remove,
   invoke,
@@ -65,6 +67,13 @@ instance Category (ComponentCat mode) where
           y <- f.handle x ctxt
           g.handle y ctxt
       }
+
+traversing :: (Traversable t) => ComponentCat mode a b -> ComponentCat mode (t a) (t b)
+traversing transform =
+  transform{handle = \col ctxt -> traverse (\x -> transform.handle x ctxt) col}
+
+between :: ComponentCat mode env a -> ComponentCat mode a b -> ComponentCat mode a c -> ComponentCat mode env c
+between pre post inside = pre >>> (inside <* post)
 
 install :: ManageEnv -> PkgDatabase -> ManageID -> InstallCond -> ComponentCat mode ManageEnv () -> IO ()
 install env pkgDb distro cond MkComponent{..} = do
