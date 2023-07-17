@@ -130,9 +130,8 @@ handleOption mEnv@ManageEnv{..} profiles = \case
     _ <- getLine
 
     modules <- activeModules mEnv x11Module activeCfg
-    pkgDb <- getDatabase mEnv
-    distro <- findDistro mEnv
-    install mEnv pkgDb distro installCond (mconcat modules)
+    pkgData <- loadPackageData mEnv
+    install mEnv pkgData installCond (mconcat modules)
 
   -- Lists installed profiles
   ListProf -> do
@@ -146,10 +145,9 @@ handleOption mEnv@ManageEnv{..} profiles = \case
   -- Profile-specific installation
   InstallProf rawPath installCond -> do
     cfgPath <- canonicalizePath rawPath
-    pkgDb <- getDatabase mEnv
-    distro <- findDistro mEnv
+    pkgData <- loadPackageData mEnv
     (profile, ident) <- loadProfile cfgPath
-    install mEnv pkgDb distro installCond profile
+    install mEnv pkgData installCond profile
     let addProfile = M.insert ident cfgPath
     varMS $~ \saved@ManageSaved{profiles} -> saved{profiles = addProfile profiles}
 

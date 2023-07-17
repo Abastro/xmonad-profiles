@@ -4,8 +4,10 @@ module Packages (
   ManageID (..),
   Package (..),
   packageName,
-  PkgDatabase,
+  SystemPackages,
+  PackageData,
   InstallCond (..),
+  loadPackageData,
   getDatabase,
   installPackages,
   findDistro,
@@ -39,18 +41,18 @@ packageName (AsPackage name) = name
 
 -- | Rudimentary package database.
 -- Not a proper DB, and is never meant to be.
-data PkgDatabase = AsPkgDatabase
+data SystemPackages = SystemPackages
   { derivatives :: !(M.Map ManageID ManageID)
   , distros :: !(M.Map ManageID Installer)
   , commons :: [Manager]
-  , packages :: !(M.Map Package PkgInfo)
+  , packages :: !(M.Map Package PackageInfo)
   }
   deriving (Show)
 
-instance FromYAML PkgDatabase where
-  parseYAML :: Node Pos -> Parser PkgDatabase
+instance FromYAML SystemPackages where
+  parseYAML :: Node Pos -> Parser SystemPackages
   parseYAML = withMap "system-packages" $ \m ->
-    AsPkgDatabase
+    SystemPackages
       <$> (m .: T.pack "derivatives")
       <*> (m .: T.pack "distros")
       <*> (m .: T.pack "commons")
@@ -70,7 +72,6 @@ instance FromYAML Manager where
   parseYAML :: Node Pos -> Parser Manager
   parseYAML = withMap "manager" $ \m ->
     ManagerOf <$> (m .: T.pack "id") <*> (m .: T.pack "installer")
-
 instance FromYAML Installer where
   parseYAML :: Node Pos -> Parser Installer
   parseYAML = withMap "installer" $ \m ->
@@ -79,13 +80,13 @@ instance FromYAML Installer where
       <*> (m .: T.pack "arg-install")
       <*> (m .: T.pack "need-root")
 
-data PkgInfo = MkPkgInfo
+data PackageInfo = PackageInfo
   { components :: Maybe Components
   , naming :: Maybe (M.Map ManageID T.Text)
   }
   deriving (Show)
-emptyInfo :: PkgInfo
-emptyInfo = MkPkgInfo Nothing Nothing
+emptyInfo :: PackageInfo
+emptyInfo = PackageInfo Nothing Nothing
 
 -- | Components are currently only used for checking presence.
 data Components = WithComponents
@@ -94,33 +95,42 @@ data Components = WithComponents
   }
   deriving (Show)
 
-instance FromYAML PkgInfo where
-  parseYAML :: Node Pos -> Parser PkgInfo
-  parseYAML = withMap "" $ \m ->
-    MkPkgInfo
-      <$> (m .:? T.pack "components")
-      <*> (m .:? T.pack "naming")
-
+instance FromYAML PackageInfo where
+  parseYAML :: Node Pos -> Parser PackageInfo
+  parseYAML = withMap "package" $ \m ->
+    PackageInfo
+      <$> (m .:? "components")
+      <*> (m .:? "naming")
 instance FromYAML Components where
   parseYAML :: Node Pos -> Parser Components
-  parseYAML = withMap "" $ \m ->
+  parseYAML = withMap "components" $ \m ->
     WithComponents
-      <$> (m .:? T.pack "executable" .!= [])
-      <*> (m .:? T.pack "library" .!= [])
+      <$> (m .:? "executable" .!= [])
+      <*> (m .:? "library" .!= [])
 
-data PkgsError
+data PackagesError
   = DatabaseMalformed String
   | UnknownDistro ManageID
   | UnknownPackages [Package]
   | NotAvailableInDistro ManageID [Package]
   deriving (Show)
 
-instance Exception PkgsError
+instance Exception PackagesError
 
 data InstallCond = WhenAbsent | AlwaysInstall
 
-findDistro :: ManageEnv -> IO ManageID
-findDistro ManageEnv{..} = do
+-- | Aggregated data
+data PackageData = PackageData
+  { currentDistro :: !ManageID
+  , systemPackages :: !SystemPackages
+  }
+  deriving (Show)
+
+loadPackageData :: ManageEnv -> IO PackageData
+loadPackageData mEnv = PackageData <$> findDistro <*> getDatabase mEnv
+
+findDistro :: IO ManageID
+findDistro = do
   got <- readProcess "lsb_release" ["-i"] []
   case stripPrefix "Distributor ID:" got of
     Nothing -> do
@@ -128,47 +138,50 @@ findDistro ManageEnv{..} = do
       throwIO (UnknownDistro $ ManageIDOf (T.pack "invalid"))
     Just distro -> pure (ManageIDOf . T.strip $ T.pack distro)
 
-getDatabase :: ManageEnv -> IO PkgDatabase
+getDatabase :: ManageEnv -> IO SystemPackages
 getDatabase ManageEnv{..} = do
   readYAMLFile DatabaseMalformed (envPath </> "database" </> "system-packages.yaml")
 
 -- ?? How did I write this ??
-installPackages :: ManageEnv -> PkgDatabase -> ManageID -> InstallCond -> [Package] -> IO ()
-installPackages mEnv@ManageEnv{..} AsPkgDatabase{..} distro cond deps = do
-  distroInst <- case distros M.!? originDistro of
+installPackages :: ManageEnv -> PackageData -> InstallCond -> [Package] -> IO ()
+installPackages mEnv@ManageEnv{..} PackageData{..} cond deps = do
+  distroInst <- case systemPackages.distros M.!? originDistro of
     Just inst -> pure inst
     Nothing -> throwIO (UnknownDistro originDistro)
 
   -- Locate package info.
-  let pkgInfos = M.restrictKeys packages depSet
+  let pkgInfos = M.restrictKeys systemPackages.packages depSet
       missings = S.filter (`M.notMember` pkgInfos) depSet
   unless (S.null missings) $ do
     throwIO (UnknownPackages $ S.toList missings)
 
   -- Find out what packages are installable.
-  let managers = ManagerOf originDistro distroInst : commons
+  let managers = ManagerOf originDistro distroInst : systemPackages.commons
       (missingInstalls, installTargets) = mapAccumL splitOutInstallable pkgInfos managers
   unless (M.null missingInstalls) $ do
-    throwIO (NotAvailableInDistro distro $ M.keys missingInstalls)
+    throwIO (NotAvailableInDistro currentDistro $ M.keys missingInstalls)
 
   -- Then, installs the packages.
   let installFor (ManagerOf _ installer) = installPkgsWith mEnv installer cond
   zipWithM_ installFor managers installTargets -- ? Maybe This is fragile
   where
     depSet = S.fromList deps
-    originDistro = fromMaybe distro (derivatives M.!? distro)
+    originDistro = fromMaybe currentDistro (systemPackages.derivatives M.!? currentDistro)
 
-splitOutInstallable :: M.Map Package PkgInfo -> Manager -> (M.Map Package PkgInfo, M.Map Package (PkgInfo, T.Text))
+splitOutInstallable ::
+  M.Map Package PackageInfo ->
+  Manager ->
+  (M.Map Package PackageInfo, M.Map Package (PackageInfo, T.Text))
 splitOutInstallable pkgs (ManagerOf manageID _) = M.mapEitherWithKey nameWithInfo pkgs
   where
     nameWithInfo pkg pkgInfo = (pkgInfo,) <$> packageNameOn manageID pkg pkgInfo
 
-packageNameOn :: ManageID -> Package -> PkgInfo -> Either PkgInfo T.Text
+packageNameOn :: ManageID -> Package -> PackageInfo -> Either PackageInfo T.Text
 packageNameOn manageID (AsPackage pkgID) pkgInfo = case pkgInfo.naming of
   Just names -> maybe (Left pkgInfo) Right $ names M.!? manageID
   Nothing -> Right pkgID
 
-installPkgsWith :: ManageEnv -> Installer -> InstallCond -> M.Map Package (PkgInfo, T.Text) -> IO ()
+installPkgsWith :: ManageEnv -> Installer -> InstallCond -> M.Map Package (PackageInfo, T.Text) -> IO ()
 installPkgsWith ManageEnv{..} InstallerOf{..} cond pkgs = do
   printf "Installing with: %s %s\n" (T.unpack instName) (T.unpack argInstall)
   case cond of
@@ -190,9 +203,9 @@ installPkgsWith ManageEnv{..} InstallerOf{..} cond pkgs = do
 
 data Existing = Exists
 
-detectInstalled :: T.Text -> PkgInfo -> IO (Either Existing T.Text)
+detectInstalled :: T.Text -> PackageInfo -> IO (Either Existing T.Text)
 detectInstalled target = \case
-  MkPkgInfo{components = Just WithComponents{..}} -> do
+  PackageInfo{components = Just WithComponents{..}} -> do
     hasAllExes <- and <$> traverse hasExecutable executable
     hasAllLibs <- and <$> traverse hasLibrary library
     pure $ if hasAllExes && hasAllLibs then Left Exists else Right target

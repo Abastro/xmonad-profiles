@@ -75,10 +75,10 @@ traversing transform =
 between :: ComponentCat mode env a -> ComponentCat mode a b -> ComponentCat mode a c -> ComponentCat mode env c
 between pre post inside = pre >>> (inside <* post)
 
-install :: ManageEnv -> PkgDatabase -> ManageID -> InstallCond -> ComponentCat mode ManageEnv () -> IO ()
-install env pkgDb distro cond MkComponent{..} = do
+install :: ManageEnv -> PackageData -> InstallCond -> ComponentCat mode ManageEnv () -> IO ()
+install env pkgData cond MkComponent{..} = do
   printf "Installing dependencies...\n"
-  installPackages env pkgDb distro cond dependencies
+  installPackages env pkgData cond dependencies
   printf "Running custom installation process...\n"
   handle env (Custom Install)
 
