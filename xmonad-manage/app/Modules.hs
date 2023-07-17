@@ -23,6 +23,7 @@ import GHC.Generics
 import Manages
 import Packages
 import System.FilePath
+import System.IO
 import System.Process
 import Text.Printf
 
@@ -94,7 +95,7 @@ loadActiveCfg mEnv = loadConfig mEnv "active-modules.yaml" readCfg
     verifyType typ modulePath = do
       ModuleSpec{..} <- readModuleSpec (canonPath mEnv modulePath)
       unless (moduleType == Just typ) $ do
-        printf "Module %s is specified for type %s, yet it has type %s.\n" name (show typ) (show moduleType)
+        hPrintf stderr "Module %s is specified for type %s, yet it has type %s.\n" name (show typ) (show moduleType)
         fail "Wrong module for the type."
       pure modulePath
 
@@ -143,14 +144,11 @@ moduleForSpec :: FilePath -> ModuleSpec -> Component ModuleMode
 moduleForSpec moduleDir spec = deps <> setupEnv <> scripts
   where
     deps = ofDependencies spec.dependencies
-    scripts =
-      fromScript
-        (executeScript spec)
-        ( \case
-            Install -> scriptFor <$> spec.install
-            Remove -> Nothing
-        )
-        (\Start -> scriptFor spec.run)
+    scripts = fromScript (executeScript spec) $ \case
+      Custom Install -> scriptFor <$> spec.install
+      Custom Remove -> Nothing
+      InvokeOn Start -> Just (scriptFor spec.run)
+
     setupEnv = ofHandle (setupEnvironment spec)
     scriptFor path = moduleDir </> path
 

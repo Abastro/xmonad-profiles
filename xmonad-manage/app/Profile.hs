@@ -96,17 +96,12 @@ profileForSpec configDir spec = profile
         , scripts
         , buildOnInstall
         ]
-    scripts =
-      fromScript
-        executeScript
-        ( \case
-            Install -> cfgFor <$> spec.installScript
-            Remove -> Nothing
-        )
-        ( \case
-            BuildMode -> cfgFor spec.buildScript
-            RunMode -> cfgFor spec.runService
-        )
+    scripts = fromScript executeScript $ \case
+      Custom Install -> cfgFor <$> spec.installScript
+      Custom Remove -> Nothing
+      InvokeOn BuildMode -> Just (cfgFor spec.buildScript)
+      InvokeOn RunMode -> Nothing
+
     cfgFor path = configDir </> path
     -- Installation should finish with building the profile.
     buildOnInstall = ofHandle $ \mEnv -> \case

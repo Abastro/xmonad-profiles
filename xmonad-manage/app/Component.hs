@@ -17,6 +17,7 @@ module Component (
 import Common
 import Control.Applicative
 import Data.Foldable
+import Data.Maybe
 import Manages
 import Packages
 import Text.Printf
@@ -98,22 +99,17 @@ invoke env mode MkComponent{..} = do
 fromScript ::
   (Enum mode, Bounded mode) =>
   (env -> FilePath -> Context mode -> IO ()) ->
-  (SetupPhase -> Maybe FilePath) ->
-  (mode -> FilePath) ->
+  (Context mode -> Maybe FilePath) ->
   ComponentCat mode env ()
-fromScript executor setupScripts invokeScripts = withSetupScripts <> withInvokeScripts
+fromScript executor scripts = makeExecutable <> executeScripts
   where
-    withSetupScripts = ofHandle $ \env -> \case
-      -- Needs to be executable
-      Custom phase -> for_ (setupScripts phase) $ \setup -> do
-        setToExecutable setup
-        executor env setup (Custom phase)
-      InvokeOn _ -> pure ()
-    withInvokeScripts = ofHandle $ \env -> \case
-      -- Needs to be executable
-      Custom Install -> for_ [minBound .. maxBound] $ \mode -> setToExecutable (invokeScripts mode)
-      Custom Remove -> pure ()
-      InvokeOn mode -> executor env (invokeScripts mode) (InvokeOn mode)
+    allCtxt = (Custom <$> [minBound .. maxBound]) <> (InvokeOn <$> [minBound .. maxBound])
+    makeExecutable = ofHandle $ \_ -> \case
+      Custom Install -> do
+        traverse_ setToExecutable (mapMaybe scripts allCtxt)
+      _ -> pure ()
+    executeScripts = ofHandle $ \env ctxt -> do
+      for_ (scripts ctxt) $ \script -> executor env script ctxt
 
 ofHandle :: (env -> Context mode -> IO a) -> ComponentCat mode env a
 ofHandle handle = MkComponent{dependencies = [], handle}
