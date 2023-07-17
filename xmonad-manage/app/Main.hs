@@ -20,7 +20,6 @@ import System.Environment
 import System.Exit
 import System.FilePath
 import System.IO
-import System.Process
 import Text.Printf
 import X11
 import GHC.IO.Handle
@@ -134,13 +133,6 @@ handleOption mEnv@ManageEnv{..} profiles = \case
     pkgDb <- getDatabase mEnv
     distro <- findDistro mEnv
     install mEnv pkgDb distro installCond (mconcat modules)
-
-    putStrLn "Installing xmonad-manage service..."
-    serviceDir <- getServiceDirectory GlobalService
-    callProcess "sudo" ["cp", envPath </> "database" </> "xmonad-manage@.service", serviceDir]
-    printf "Service installed at %s.\n" (serviceDir </> "xmonad-manage@.service")
-    callProcess "systemctl" ["--user", "daemon-reload"]
-    putStrLn "Systemd user daemon reloaded."
 
   -- Lists installed profiles
   ListProf -> do

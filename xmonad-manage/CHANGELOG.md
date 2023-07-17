@@ -5,6 +5,7 @@
 - Service installer does not expand `${Home}` now, use `%h` instead.
 - xmonad-manage is simple executable without systemd service again.
   - There were issues with inheriting the environment variables.
+- Logs are redirected on `xmonad-manage run` to `./logs`.
 
 ## 0.7.2
 - **! Recommends running `xmonad-manage setup` and re-installing your profile !**

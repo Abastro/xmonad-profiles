@@ -7,7 +7,7 @@ NB: Only works for the listed submodules.
 ## Installation
 
 Requires:
-- Ubuntu with Gnome desktop environment
+- Gnome desktop environment
 - [Git](https://git-scm.com/) for cloning
 - [GHCup](https://www.haskell.org/ghcup/)
 - [Cabal](https://www.haskell.org/cabal/), preferably installed via GHCup
@@ -15,7 +15,7 @@ Requires:
 Procedure:
 1. `git clone` this repository at suitable location to manage the profiles inside.
 2. `cd xmonad-profiles` to get into the repo directory.
-3. Run `./install.sh` to install `xmonad-manage`
+3. Run `./install.sh` to install `xmonad-manage`.
     * Likely requires granting executable permission.
     * Adds `xmonad-manage` executable `/opt/bin`. This might change in near future.
 4. Run `xmonad-manage setup` to install required components.
