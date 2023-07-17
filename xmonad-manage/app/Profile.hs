@@ -172,8 +172,7 @@ prepareSession :: ProfileSpec -> Directories -> Context a -> IO ()
 prepareSession ProfileSpec{..} dirs = \case
   Custom Install -> do
     printf "Installing xsession desktop entry...\n"
-    -- TODO This could be simplified
-    template <- T.readFile desktopTemplatePath >>= parseShellString "desktop entry template"
+    template <- readShellStringFile desktopTemplatePath
     desktopEntry <- shellExpandFromMap onEnvNotFound profileEnv template
     T.writeFile intermediatePath desktopEntry
     -- Instead of linking, we copy the runner. Fixes issues with SDDM.
@@ -222,7 +221,7 @@ installService templatePath dirs = \case
   -- Install on build to allow frequent changes of services
   InvokeOn BuildMode -> do
     printf "Service %s being installed.\n" serviceName
-    template <- T.readFile (dirs.configDir </> templatePath) >>= parseShellString serviceName
+    template <- readShellStringFile (dirs.configDir </> templatePath)
     service <- shellExpandFromMap onEnvNotFound (environments dirs) template
     T.writeFile (dirs.serviceDir </> serviceName) service
   Custom Remove -> do
@@ -231,4 +230,4 @@ installService templatePath dirs = \case
   _ -> pure ()
   where
     serviceName = serviceNameOf templatePath
-    onEnvNotFound key = fail $ printf "Environment variable %s not found." key
+    onEnvNotFound key = fail $ printf "Service variable %s not found." key

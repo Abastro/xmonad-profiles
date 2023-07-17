@@ -18,6 +18,7 @@ module Common (
   getServiceDirectory,
   ShellString,
   parseShellString,
+  readShellStringFile,
   shellExpandWith,
   shellExpand,
   shellExpandFromMap,
@@ -32,6 +33,7 @@ import Data.Coerce
 import Data.Map.Strict qualified as M
 import Data.Serialize
 import Data.Text qualified as T
+import Data.Text.IO qualified as T
 import Data.YAML
 import System.Directory
 import System.Environment
@@ -136,6 +138,9 @@ parseShellString name txt = case P.parse shellStr name txt of
 instance FromYAML ShellString where
   parseYAML :: Node Pos -> Parser ShellString
   parseYAML = withStr "shell-string" (parseShellString "shell")
+
+readShellStringFile :: FilePath -> IO ShellString
+readShellStringFile path = T.readFile path >>= parseShellString path
 
 shellExpandWith :: (MonadFail m) => (T.Text -> m T.Text) -> ShellString -> m T.Text
 shellExpandWith act (MkShellStr strs) = mconcat <$> traverse expand strs
