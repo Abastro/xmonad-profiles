@@ -9,6 +9,7 @@ import Data.Foldable
 import Data.List
 import Data.Map.Strict qualified as M
 import Data.StateVar
+import Data.Text qualified as T
 import Manages
 import Modules
 import Options.Applicative qualified as Opts
@@ -22,7 +23,7 @@ import System.IO
 import System.Process
 import Text.Printf
 import X11
-import qualified Data.Text as T
+import GHC.IO.Handle
 
 -- * Fetches from separate configuration directory for each profile.
 
@@ -76,18 +77,18 @@ manageOpts =
           Opts.info (RunProf <$> profIdArg) $
             Opts.progDesc "Runs a profile."
       ]
-  where
-    version = "xmonad-manage " <> VERSION_xmonad_manage
-    pathArg name = Opts.strArgument $ Opts.metavar name <> Opts.action "directory"
-    profIdArg = Opts.argument (Opts.str >>= makeIDM) $ Opts.metavar "<profile-id>"
-    installCond =
-      Opts.flag
-        WhenAbsent
-        AlwaysInstall
-        ( Opts.long "always-install"
-            <> Opts.short 'a'
-            <> Opts.help "Run installation regardless of whether it was installed or not."
-        )
+ where
+  version = "xmonad-manage " <> VERSION_xmonad_manage
+  pathArg name = Opts.strArgument $ Opts.metavar name <> Opts.action "directory"
+  profIdArg = Opts.argument (Opts.str >>= makeIDM) $ Opts.metavar "<profile-id>"
+  installCond =
+    Opts.flag
+      WhenAbsent
+      AlwaysInstall
+      ( Opts.long "always-install"
+          <> Opts.short 'a'
+          <> Opts.help "Run installation regardless of whether it was installed or not."
+      )
 
 -- | The manager program. Current directory needs to be the profile main directory.
 main :: IO ()
@@ -97,20 +98,20 @@ main = (`catch` handleError) $ do
 
   ManageSaved{managePath = envPath, profiles} <- get varMS
   Opts.customExecParser optPrefs manageOpts >>= handleOption ManageEnv{..} profiles
-  where
-    -- ? Do these need to be here?
-    handleError = \case
-      ProfileNotFound profID -> do
-        hPrintf stderr "Error: Profile %s not found\n" (idStr profID)
-        exitWith (ExitFailure 1)
-      ProfileIOError profPath err -> do
-        hPrintf stderr "Error: IO Exception while loading profile on path %s\n" profPath
-        hPrintf stderr "Details: %s\n" (show err)
-        exitWith (ExitFailure 2)
-      ProfileWrongFormat details -> do
-        hPrintf stderr "Error: Profile cannot be read from profile.cfg\n"
-        hPrintf stderr "Details: %s\n" details
-        exitWith (ExitFailure 3)
+ where
+  -- ? Do these need to be here?
+  handleError = \case
+    ProfileNotFound profID -> do
+      hPrintf stderr "Error: Profile %s not found\n" (idStr profID)
+      exitWith (ExitFailure 1)
+    ProfileIOError profPath err -> do
+      hPrintf stderr "Error: IO Exception while loading profile on path %s\n" profPath
+      hPrintf stderr "Details: %s\n" (show err)
+      exitWith (ExitFailure 2)
+    ProfileWrongFormat details -> do
+      hPrintf stderr "Error: Profile cannot be read from profile.cfg\n"
+      hPrintf stderr "Details: %s\n" details
+      exitWith (ExitFailure 3)
 
 handleOption :: ManageEnv -> M.Map ID FilePath -> Action -> IO ()
 handleOption mEnv@ManageEnv{..} profiles = \case
@@ -176,43 +177,59 @@ handleOption mEnv@ManageEnv{..} profiles = \case
 
   -- Automatic profile run
   RunProf profID -> withProfPath profID $ \cfgPath -> do
+    -- Redirect stdout/stderr elsewhere; lightdm is being goofy about it..
+    -- Need to look into xsessions if something happens beforehand.
+    createDirectoryIfMissing True (envPath </> "logs")
+    handleOut <- openFile (envPath </> "logs" </> "start.out") WriteMode
+    handleErr <- openFile (envPath </> "logs" </> "start.err") WriteMode
+
+    hDuplicateTo handleOut stdout
+    hDuplicateTo handleErr stderr
+    hClose handleOut
+    hClose handleErr
+
+    hSetBuffering stdout LineBuffering
+    hSetBuffering stderr LineBuffering
+    putStrLn "> Log redirected. <"
+
     withCurrentDirectory home $ do
       -- PATH needs updating
+      -- ! This adds to PATH on every re-login..
       updatePATH home
       modules <- activeModules mEnv x11Module =<< loadActiveCfg mEnv
       invoke mEnv Start (mconcat modules)
       putStrLn "Booting xmonad..."
       (profile, _) <- loadProfile cfgPath
       invoke mEnv RunMode profile
-  where
-    getProfile profID =
-      maybe (throwIO $ ProfileNotFound profID) pure $ profiles M.!? profID
+ where
+  getProfile profID =
+    maybe (throwIO $ ProfileNotFound profID) pure $ profiles M.!? profID
 
-    withProfPath profID act = case profiles M.!? profID of
-      Nothing -> throwIO (ProfileNotFound profID)
-      Just profilePath -> act profilePath
+  withProfPath profID act = case profiles M.!? profID of
+    Nothing -> throwIO (ProfileNotFound profID)
+    Just profilePath -> act profilePath
 
-    printActive :: ModuleSet ModuleSpec -> IO ()
-    printActive modules = do
-      for_ [minBound .. maxBound] $ \typ -> do
-        case modules.typedModules M.!? typ of
-          Just mod -> printf "%s: %s\n" (show typ) mod.name
-          Nothing -> printf "%s: None\n" (show typ)
-      printf "Others: %s\n" $ show $ (\mod -> mod.name) <$> modules.otherModules
+  printActive :: ModuleSet ModuleSpec -> IO ()
+  printActive modules = do
+    for_ [minBound .. maxBound] $ \typ -> do
+      case modules.typedModules M.!? typ of
+        Just mod -> printf "%s: %s\n" (show typ) mod.name
+        Nothing -> printf "%s: None\n" (show typ)
+    printf "Others: %s\n" $ show $ (\mod -> mod.name) <$> modules.otherModules
 
-    updatePATH :: FilePath -> IO ()
-    updatePATH home = do
-      path <- getEnv "PATH"
-      -- Blame ghcup for not putting environment inside .profile, duh
-      -- ? Maybe check if these are added in PATH beforehand
-      let newPath =
-            intercalate
-              ":"
-              [ home </> ".cabal" </> "bin"
-              , home </> ".ghcup" </> "bin"
-              , thisInstallDirectory
-              , path
-              ]
-      printf "Updating path to \"%s\"...\n" newPath
-      setEnv "PATH" newPath
-      setServiceEnv "PATH" (T.pack newPath)
+  updatePATH :: FilePath -> IO ()
+  updatePATH home = do
+    path <- getEnv "PATH"
+    -- Blame ghcup for not putting environment inside .profile, duh
+    -- ? Maybe check if these are added in PATH beforehand
+    let newPath =
+          intercalate
+            ":"
+            [ home </> ".cabal" </> "bin"
+            , home </> ".ghcup" </> "bin"
+            , thisInstallDirectory
+            , path
+            ]
+    printf "Updating path to \"%s\"...\n" newPath
+    setEnv "PATH" newPath
+    setServiceEnv "PATH" (T.pack newPath)
