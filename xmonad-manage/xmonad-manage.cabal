@@ -27,6 +27,7 @@ executable xmonad-manage
     RecordWildCards
     NoFieldSelectors
     OverloadedRecordDot
+    OverloadedStrings
     NoImplicitPrelude
   build-depends:
       base ^>=4.17.1.0

@@ -29,6 +29,7 @@ import Control.Monad
 import Data.ByteString.Lazy qualified as B
 import Data.Char
 import Data.Coerce
+import Data.Map.Strict qualified as M
 import Data.Serialize
 import Data.Text qualified as T
 import Data.YAML
@@ -39,7 +40,6 @@ import System.Process
 import Text.Parsec qualified as P
 import Text.Printf
 import Prelude hiding (id, (.))
-import qualified Data.Map.Strict as M
 
 thisInstallDirectory :: FilePath
 thisInstallDirectory = "/opt" </> "bin"
@@ -112,10 +112,10 @@ data ShellStrElem = Str !T.Text | Var !T.Text
 
 -- | Example:
 --
--- >>> parseShellString "example text" (T.pack "Hello, ${NAME}! ${GREETINGS}.")
+-- >>> parseShellString "example text" "Hello, ${NAME}! ${GREETINGS}."
 -- MkShellStr [Str "Hello, ",Var "NAME",Str "! ",Var "GREETINGS",Str "."]
 --
--- >>> parseShellString "error example" (T.pack "Unmatched ${ bracket")
+-- >>> parseShellString "error example" "Unmatched ${ bracket"
 -- user error ("error example" (line 1, column 21):
 -- unexpected end of input
 -- expecting variable)
@@ -147,7 +147,7 @@ shellExpandWith act (MkShellStr strs) = mconcat <$> traverse expand strs
 shellExpand :: ShellString -> IO T.Text
 shellExpand = shellExpandWith (fmap T.pack . getEnv . T.unpack)
 
-shellExpandFromMap :: MonadFail m => (forall a. String -> m a) -> M.Map String T.Text -> ShellString -> m T.Text
+shellExpandFromMap :: (MonadFail m) => (forall a. String -> m a) -> M.Map String T.Text -> ShellString -> m T.Text
 shellExpandFromMap onMissing refMap = shellExpandWith $ \key -> case refMap M.!? T.unpack key of
   Just val -> pure val
   Nothing -> onMissing (T.unpack key)

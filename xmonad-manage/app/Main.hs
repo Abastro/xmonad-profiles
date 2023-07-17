@@ -215,7 +215,7 @@ handleOption mEnv@ManageEnv{..} profiles = \case
   redirectLogs = do
     let logPath = envPath </> "logs"
     -- Redirect stdout/stderr elsewhere; lightdm is being goofy about it..
-    -- Need to look into ~/.xsession-errors if something happens beforehand.
+    -- You need to look into ~/.xsession-errors if something happens beforehand.
     createDirectoryIfMissing True logPath
     handleOut <- openFile (logPath </> "start.out") WriteMode
     handleErr <- openFile (logPath </> "start.err") WriteMode

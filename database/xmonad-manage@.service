@@ -1,8 +1,0 @@
-[Unit]
-Description=XMonad profile manager associated with profile %i.
-
-[Service]
-Type=simple
-StandardOutput=journal
-StandardError=journal
-ExecStart=/opt/bin/xmonad-manage run %i

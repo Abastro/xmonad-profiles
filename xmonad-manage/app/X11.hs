@@ -1,5 +1,3 @@
-{-# LANGUAGE OverloadedStrings #-}
-
 -- | X11 setup and settings.
 module X11 (
   x11Module,
@@ -133,6 +131,7 @@ handleXsettings (ThisEnv _ displayCfg xsettingsDir) = \case
   InvokeOn Start -> do
     printf "[X11] Running XSettingsd for X settings.\n"
     _ <- spawnProcess "xsettingsd" []
-    setServiceEnv "GTK_THEME" displayCfg.theme -- Workaround for GTK4 apps reaching for GTK_THEME.
+    setServiceEnv "GTK_THEME" displayCfg.theme
+    -- Workaround for GTK4 apps reaching for GTK_THEME.
     setServiceEnv "QT_AUTO_SCREEN_SCALE_FACTOR" "1" -- HiDPI Scales for QT
     setServiceEnv "QT_QPA_PLATFORMTHEME" "qt5ct"

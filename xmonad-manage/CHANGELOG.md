@@ -6,6 +6,7 @@
 - xmonad-manage is simple executable without systemd service again.
   - There were issues with inheriting the environment variables.
 - Logs are redirected on `xmonad-manage run` to `./logs`.
+  - On the beginning before redirection, look into session error directories like `~/.xsession-errors`.
 
 ## 0.7.2
 - **! Recommends running `xmonad-manage setup` and re-installing your profile !**

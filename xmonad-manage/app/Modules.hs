@@ -126,12 +126,12 @@ instance FromYAML ModuleSpec where
   parseYAML :: Node Pos -> Parser ModuleSpec
   parseYAML = withMap "module" $ \m ->
     ModuleSpec
-      <$> (m .:! T.pack "type")
-      <*> (m .: T.pack "name")
-      <*> (fmap T.unpack <$> m .:! T.pack "install")
-      <*> (T.unpack <$> m .: T.pack "run")
-      <*> (m .:? T.pack "environment" .!= M.empty)
-      <*> (m .:? T.pack "dependencies" .!= [])
+      <$> (m .:! "type")
+      <*> (m .: "name")
+      <*> (fmap T.unpack <$> m .:! "install")
+      <*> (T.unpack <$> m .: "run")
+      <*> (m .:? "environment" .!= M.empty)
+      <*> (m .:? "dependencies" .!= [])
 
 readModuleSpec :: FilePath -> IO ModuleSpec
 readModuleSpec moduleDir = readYAMLFile userError (moduleDir </> "module.yaml")

@@ -43,13 +43,13 @@ instance FromYAML ProfileSpec where
   parseYAML :: Node Pos -> Parser ProfileSpec
   parseYAML = withMap "profile" $ \m ->
     ProfileSpec
-      <$> (m .: T.pack "ID")
-      <*> (ProfileProps <$> m .: T.pack "name" <*> m .: T.pack "details")
-      <*> (fmap T.unpack <$> m .:? T.pack "install")
-      <*> (T.unpack <$> m .: T.pack "build")
-      <*> (T.unpack <$> m .: T.pack "run-service")
-      <*> (map T.unpack <$> m .:? T.pack "other-services" .!= [])
-      <*> (m .:? T.pack "dependencies" .!= [])
+      <$> (m .: "ID")
+      <*> (ProfileProps <$> m .: "name" <*> m .: "details")
+      <*> (fmap T.unpack <$> m .:? "install")
+      <*> (T.unpack <$> m .: "build")
+      <*> (T.unpack <$> m .: "run-service")
+      <*> (map T.unpack <$> m .:? "other-services" .!= [])
+      <*> (m .:? "dependencies" .!= [])
 
 data ProfileError
   = ProfileNotFound ID
