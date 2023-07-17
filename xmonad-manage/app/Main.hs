@@ -177,24 +177,9 @@ handleOption mEnv@ManageEnv{..} profiles = \case
 
   -- Automatic profile run
   RunProf profID -> withProfPath profID $ \cfgPath -> do
-    -- Redirect stdout/stderr elsewhere; lightdm is being goofy about it..
-    -- Need to look into xsessions if something happens beforehand.
-    createDirectoryIfMissing True (envPath </> "logs")
-    handleOut <- openFile (envPath </> "logs" </> "start.out") WriteMode
-    handleErr <- openFile (envPath </> "logs" </> "start.err") WriteMode
-
-    hDuplicateTo handleOut stdout
-    hDuplicateTo handleErr stderr
-    hClose handleOut
-    hClose handleErr
-
-    hSetBuffering stdout LineBuffering
-    hSetBuffering stderr LineBuffering
-    putStrLn "> Log redirected. <"
-
+    redirectLogs
     withCurrentDirectory home $ do
       -- PATH needs updating
-      -- ! This adds to PATH on every re-login..
       updatePATH home
       modules <- activeModules mEnv x11Module =<< loadActiveCfg mEnv
       invoke mEnv Start (mconcat modules)
@@ -233,3 +218,21 @@ handleOption mEnv@ManageEnv{..} profiles = \case
     printf "Updating path to \"%s\"...\n" newPath
     setEnv "PATH" newPath
     setServiceEnv "PATH" (T.pack newPath)
+
+  redirectLogs :: IO ()
+  redirectLogs = do
+    let logPath = envPath </> "logs"
+    -- Redirect stdout/stderr elsewhere; lightdm is being goofy about it..
+    -- Need to look into ~/.xsession-errors if something happens beforehand.
+    createDirectoryIfMissing True logPath
+    handleOut <- openFile (logPath </> "start.out") WriteMode
+    handleErr <- openFile (logPath </> "start.err") WriteMode
+
+    hDuplicateTo handleOut stdout
+    hDuplicateTo handleErr stderr
+    hClose handleOut
+    hClose handleErr
+
+    hSetBuffering stdout LineBuffering
+    hSetBuffering stderr LineBuffering
+    putStrLn "> Log redirected. <"

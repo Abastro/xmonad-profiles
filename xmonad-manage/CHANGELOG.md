@@ -3,11 +3,13 @@
 - Removed update command, please use `./install.sh` instead.
 - Logging headers on each output/error lines are removed.
 - Service installer does not expand `${Home}` now, use `%h` instead.
+- xmonad-manage is simple executable without systemd service again.
+  - There were issues with inheriting the environment variables.
 
 ## 0.7.2
 - **! Recommends running `xmonad-manage setup` and re-installing your profile !**
-- Xmonad-manage is now installed in `/opt/bin`.
-- Xmonad-manage now runs as a systemd service.
+- xmonad-manage is now installed in `/opt/bin`.
+- xmonad-manage now runs as a systemd service.
 
 ## 0.7.1
 - Active modules are now based on configuration in `config/active-modules.yaml`.
