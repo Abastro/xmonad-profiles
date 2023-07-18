@@ -87,7 +87,7 @@ xsettingsText cfg = T.unlines $ do
 data ThisEnv = ThisEnv !FilePath !DisplayConfig !FilePath
 
 x11Module :: ComponentCat ModuleMode ManageEnv ()
-x11Module = withIdentifier (UnsafeMakeID "X11") $ xmonadDeps <> (getConfig >>> xresources <> xsettingsd) <> xsetup
+x11Module = withIdentifier (UnsafeMakeID "x11") $ xmonadDeps <> (getConfig >>> xresources <> xsettingsd) <> xsetup
   where
     xmonadDeps = ofDependencies [AsPackage "libxss", AsPackage "xmonad"]
     xresources = withIdentifier (UnsafeMakeID "xresources") $ ofHandle handleXresources

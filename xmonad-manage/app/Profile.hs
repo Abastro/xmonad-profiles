@@ -61,9 +61,8 @@ instance Exception ProfileError
 
 readProfileSpec :: FilePath -> IO ProfileSpec
 readProfileSpec cfgDir = wrapIOError cfgDir $ readYAMLFile ProfileWrongFormat (cfgDir </> "profile.yaml")
-
-wrapIOError :: FilePath -> IO a -> IO a
-wrapIOError cfgDir = handle @IOError (throwIO . ProfileIOError cfgDir)
+  where
+    wrapIOError cfgDir = handle @IOError (throwIO . ProfileIOError cfgDir)
 
 data ProfileMode = BuildMode | RunMode
   deriving (Show, Eq, Enum, Bounded)

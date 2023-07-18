@@ -27,6 +27,7 @@ import System.Directory (findExecutable)
 import System.FilePath
 import System.Process
 import Text.Printf
+import System.IO
 
 -- | Manager ID, could be either distribution or installation medium.
 newtype ManageID = ManageIDOf T.Text
@@ -134,7 +135,7 @@ findDistro = do
   got <- readProcess "lsb_release" ["-i"] []
   case stripPrefix "Distributor ID:" got of
     Nothing -> do
-      printf "lsb_release failed, gave %s\n" got
+      hPrintf stderr "lsb_release failed, gave %s\n" got
       throwIO (UnknownDistro $ ManageIDOf (T.pack "invalid"))
     Just distro -> pure (ManageIDOf . T.strip $ T.pack distro)
 
