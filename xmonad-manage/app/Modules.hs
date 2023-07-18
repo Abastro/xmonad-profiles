@@ -80,7 +80,7 @@ instance FromYAML ActiveModules where
     ActiveModules <$> do
       ModuleSetOf <$> (m .: "typed-modules") <*> (m .:? "other-modules" .!= [])
 
--- TODO Merge with loadModule to produce (ModuleSet ModulePath)
+-- TODO Merge with loadModule to produce `ModuleSet (Component ModuleMode)`
 loadActiveCfg :: ManageEnv -> IO (ModuleSet ModulePath)
 loadActiveCfg mEnv = loadConfig mEnv "active-modules.yaml" readCfg
   where
