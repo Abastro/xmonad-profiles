@@ -6,14 +6,14 @@ module Component (
   traversing,
   traversing_,
   asks,
+  withIdentifier,
+  ofHandle,
+  ofAction,
+  ofDependencies,
   install,
   remove,
   invoke,
   executableScripts,
-  ofHandle,
-  ofAction,
-  ofDependencies,
-  ofIdentifier,
 ) where
 
 import Common
@@ -98,6 +98,19 @@ asks f =
     , handle = \_ ctxt -> pure (f ctxt)
     }
 
+-- | Component with identifier renamed.
+withIdentifier :: ID -> ComponentCat mode env a -> ComponentCat mode env a
+withIdentifier identifier component = component{identifier}
+
+ofHandle :: (env -> Context mode -> IO a) -> ComponentCat mode env a
+ofHandle handle = MkComponent{dependencies = [], identifier = UnsafeMakeID "handler", handle}
+
+ofAction :: (env -> IO a) -> ComponentCat mode env a
+ofAction action = ofHandle $ \env _ -> action env
+
+ofDependencies :: [Package] -> ComponentCat mode env ()
+ofDependencies dependencies = MkComponent{dependencies, identifier = UnsafeMakeID "dependencies", handle = mempty}
+
 install :: ManageEnv -> PackageData -> InstallCond -> ComponentCat mode ManageEnv () -> IO ()
 install env pkgData cond MkComponent{..} = do
   printf "Installing dependencies...\n"
@@ -128,15 +141,3 @@ executableScripts scripts = makeExecutable *> asks scripts
       Custom Install -> traverse_ setToExecutable $ mapMaybe scripts allCtxt
       _ -> pure ()
     allCtxt = (Custom <$> [minBound .. maxBound]) <> (InvokeOn <$> [minBound .. maxBound])
-
-ofHandle :: (env -> Context mode -> IO a) -> ComponentCat mode env a
-ofHandle handle = MkComponent{dependencies = [], identifier = UnsafeMakeID "handler", handle}
-
-ofAction :: (env -> IO a) -> ComponentCat mode env a
-ofAction action = ofHandle $ \env _ -> action env
-
-ofDependencies :: [Package] -> ComponentCat mode env ()
-ofDependencies dependencies = MkComponent{dependencies, identifier = UnsafeMakeID "dependencies", handle = mempty}
-
-ofIdentifier :: ID -> ComponentCat mode env ()
-ofIdentifier identifier = MkComponent{dependencies = [], identifier, handle = mempty}

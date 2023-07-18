@@ -82,19 +82,19 @@ profileForSpec :: FilePath -> ProfileSpec -> Component ProfileMode
 profileForSpec configDir spec = profile
   where
     profile =
-      mconcat
-        [ ofIdentifier spec.profileID
-        , ofDependencies spec.dependencies
-        , ofAction (getDirectories configDir spec)
-            >>> mconcat
-              [ ofHandle prepareProfileDirs
-              , ofHandle (prepareSession spec)
-              , ofHandle setupEnvironment
-              , serviceModule spec
-              ]
-        , scripts >>> traversing_ (ofHandle executeScript)
-        , buildOnInstall
-        ]
+      withIdentifier spec.profileID $
+        mconcat
+          [ ofDependencies spec.dependencies
+          , ofAction (getDirectories configDir spec)
+              >>> mconcat
+                [ ofHandle prepareProfileDirs
+                , ofHandle (prepareSession spec)
+                , ofHandle setupEnvironment
+                , serviceModule spec
+                ]
+          , scripts >>> traversing_ (ofHandle executeScript)
+          , buildOnInstall
+          ]
     scripts = executableScripts $ \case
       Custom Install -> cfgFor <$> spec.installScript
       Custom Remove -> Nothing

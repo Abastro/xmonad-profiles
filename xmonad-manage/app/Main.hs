@@ -152,18 +152,14 @@ handleOption mEnv@ManageEnv{..} profiles = \case
     varMS $~ \saved@ManageSaved{profiles} -> saved{profiles = addProfile profiles}
 
   -- Remove a profile
-  RemoveProf ident -> do
-    cfgPath <- getProfile ident
-    profile <- loadProfile cfgPath
-    remove mEnv profile
-    -- Does not care about profile's own ID if it has changed.
-    let rmProfile = M.delete ident
+  RemoveProf profID -> withProfPath profID $ \cfgPath -> do
+    remove mEnv =<< loadProfile cfgPath
+    let rmProfile = M.delete profID -- Does not care about profile's own ID if it has changed.
     varMS $~ \saved@ManageSaved{profiles} -> saved{profiles = rmProfile profiles}
 
   -- Manually build profile
   BuildProf profID -> withProfPath profID $ \cfgPath -> do
-    profile <- loadProfile cfgPath
-    invoke mEnv BuildMode profile
+    invoke mEnv BuildMode =<< loadProfile cfgPath
 
   -- Automatic profile run
   RunProf profID -> withProfPath profID $ \cfgPath -> do
@@ -175,12 +171,8 @@ handleOption mEnv@ManageEnv{..} profiles = \case
       invoke mEnv Start (mconcat modules)
 
       putStrLn "Booting xmonad..."
-      profile <- loadProfile cfgPath
-      invoke mEnv RunMode profile
+      invoke mEnv RunMode =<< loadProfile cfgPath
   where
-    getProfile profID =
-      maybe (throwIO $ ProfileNotFound profID) pure $ profiles M.!? profID
-
     withProfPath profID act = case profiles M.!? profID of
       Nothing -> throwIO (ProfileNotFound profID)
       Just profilePath -> act profilePath
