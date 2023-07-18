@@ -1,16 +1,21 @@
 # Xmonad profile manager for Gnome
 
-More easily manageable xmonad profiles, now supporting both Ubuntu and Arch.
-
-NB: Only works for the listed submodules.
+More easily manageable xmonad profiles.
+For now, it supports two distributions:
+- Ubuntu
+- Arch
 
 ## Installation
 
 Requires:
-- Gnome desktop environment
 - [Git](https://git-scm.com/) for cloning
 - [GHCup](https://www.haskell.org/ghcup/)
 - [Cabal](https://www.haskell.org/cabal/), preferably installed via GHCup
+
+These should be installed for the manager to function.
+
+Recommended:
+- Gnome desktop environment
 
 Procedure:
 1. `git clone` this repository at suitable location to manage the profiles inside.
@@ -36,9 +41,19 @@ which you can select from the login screen.
 
 Run `xmonad-manage` to check further details.
 
-## Notes
+## XMonad-Test
 
-NB: Removal method is not yet supported; this is due to `cabal` lacking uninstall/gc methods.
+`xmonad-test` is a reference profile for `xmonad-manage`.
+Consult its files to see how to make a profile.
+
+## Notes
+### Removal
+
+NB: Manager removal method is not yet supported; this is due to `cabal` lacking uninstall/gc methods.
 
 If you don't mind nuking the haskell stores, you can remove the `xmonad-profiles` directory and `$HOME/.ghcup`, `$HOME/.cabal` to do the cleanup.
-- You might also want to clean up `${XDG_DATA_DIR}/xmonad-manage`, which contains small data files.
+
+You might also want to clean up `${XDG_DATA_DIR}/xmonad-manage`, which contains small data files.
+
+NB: Individual profiles could be removed,
+but the system dependencies are not deleted since you may have other packages dependent to it.

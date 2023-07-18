@@ -27,8 +27,6 @@ import System.IO
 import System.Process
 import Text.Printf
 
--- TODO Proper builtins & More flexibility (e.g. necessary module?)
-
 data ModuleType = Compositor | Display | Input | PolicyKit | Keyring
   deriving (Show, Eq, Ord, Enum, Bounded, Generic)
 
