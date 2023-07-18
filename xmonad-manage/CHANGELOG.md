@@ -1,13 +1,14 @@
 # Changelog
 ## master
+## 0.7.3
 - Removed update command, please use `./install.sh` instead.
+- Install command can reinstall as well; Simply specify ID in place of the path.
 - Logging headers on each output/error lines are removed.
-- Service installer does not expand `${Home}` now, use `%h` instead.
 - xmonad-manage is simple executable without systemd service again.
   - There were issues with inheriting the environment variables.
+- Service installer does not expand `${Home}` now, use `%h` instead.
 - Logs are redirected on `xmonad-manage run` to `./logs`.
   - On the beginning before redirection, look into session error directories like `~/.xsession-errors`.
-- Easier to reinstall an existing profile by specifying profile path.
 
 ## 0.7.2
 - **! Recommends running `xmonad-manage setup` and re-installing your profile !**
