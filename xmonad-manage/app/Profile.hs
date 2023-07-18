@@ -68,7 +68,7 @@ data ProfileMode = BuildMode | RunMode
   deriving (Show, Eq, Enum, Bounded)
 
 data Directories = MkDirectories
-  { configDir, dataDir, cacheDir, logDir, serviceDir, databaseDir :: !FilePath
+  { configDir, dataDir, cacheDir, serviceDir, databaseDir :: !FilePath
   }
   deriving (Show)
 
@@ -126,7 +126,6 @@ environments dirs =
     , ("XMONAD_DATA_DIR", T.pack dirs.dataDir)
     , ("XMONAD_CONFIG_DIR", T.pack dirs.configDir)
     , ("XMONAD_CACHE_DIR", T.pack dirs.cacheDir)
-    , ("XMONAD_LOG_DIR", T.pack dirs.logDir)
     ]
 
 getDirectories :: FilePath -> ProfileSpec -> ManageEnv -> IO Directories
@@ -138,7 +137,6 @@ getDirectories configDir spec mEnv = do
       { configDir
       , dataDir = locFor "data"
       , cacheDir = locFor "cache"
-      , logDir = locFor "logs"
       , serviceDir
       , databaseDir = mEnv.envPath </> "database"
       }

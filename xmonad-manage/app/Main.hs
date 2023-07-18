@@ -33,9 +33,8 @@ import X11
 -- ? Stay up-to-date appropriately corresponding to GHC Updates - How?
 -- If this were statically compiled, it would not matter, but it will take more size.
 
--- ? Keep separate directory for cabal installations?
--- Also needs to install data files into designated data portions.
-
+-- TODO Keep separate directory for cabal installations. (CABAL_DIR)
+-- TODO Also needs to install data files into designated data portions.
 -- TODO Further adopt XDG Directory
 
 data Action

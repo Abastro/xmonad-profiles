@@ -1,5 +1,5 @@
 # Changelog
-## master
+## master (0.8.0)
 ## 0.7.3
 - Removed update command, please use `./install.sh` instead.
 - Install command can reinstall as well; Simply specify ID in place of the path.
