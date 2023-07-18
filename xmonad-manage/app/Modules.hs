@@ -7,12 +7,13 @@ module Modules (
   ModuleSet (..),
   ModuleSpec (..),
   loadActiveCfg,
-  activeModuleData,
-  activeModules,
+  specifiedActiveModules,
+  combineWithBuiltins,
 ) where
 
 import Common
 import Component
+import Control.Exception
 import Control.Monad
 import Data.Foldable
 import Data.Map.Strict qualified as M
@@ -79,6 +80,7 @@ instance FromYAML ActiveModules where
     ActiveModules <$> do
       ModuleSetOf <$> (m .: "typed-modules") <*> (m .:? "other-modules" .!= [])
 
+-- TODO Merge with loadModule to produce (ModuleSet ModulePath)
 loadActiveCfg :: ManageEnv -> IO (ModuleSet ModulePath)
 loadActiveCfg mEnv = loadConfig mEnv "active-modules.yaml" readCfg
   where
@@ -91,7 +93,7 @@ loadActiveCfg mEnv = loadConfig mEnv "active-modules.yaml" readCfg
         else fail "Required modules are absent." -- IDK, do I improve this error message?
         -- ? How to: Parse, not validate?
     verifyType typ modulePath = do
-      ModuleSpec{..} <- readModuleSpec (canonPath mEnv modulePath)
+      ModuleSpec{..} <- readModuleSpec userError (canonPath mEnv modulePath)
       unless (moduleType == Just typ) $ do
         hPrintf stderr "Module %s is specified for type %s, yet it has type %s.\n" name (show typ) (show moduleType)
         fail "Wrong module for the type."
@@ -102,14 +104,13 @@ canonPath mEnv = \case
   BuiltIn ident -> mEnv.envPath </> "modules" </> ident
   External path -> path
 
-activeModuleData :: ManageEnv -> ModuleSet ModulePath -> IO (ModuleSet ModuleSpec)
-activeModuleData mEnv = traverse (readModuleSpec . canonPath mEnv)
+-- | Loads and gives the (list of) specified active modules.
+specifiedActiveModules :: ManageEnv -> ModuleSet ModulePath -> IO (ModuleSet (Component ModuleMode))
+specifiedActiveModules mEnv = traverse (loadModule . canonPath mEnv)
 
--- | Load all active modules. Takes X11 module as a parameter.
-activeModules :: ManageEnv -> Component ModuleMode -> ModuleSet ModulePath -> IO [Component ModuleMode]
-activeModules mEnv x11Module moduleSet = do
-  loaded <- traverse (loadModule . canonPath mEnv) moduleSet
-  pure (x11Module : toList loaded)
+-- | Takes X11 module as a parameter, and combines it with rest of modules.
+combineWithBuiltins :: Component ModuleMode -> ModuleSet (Component ModuleMode) -> Component ModuleMode
+combineWithBuiltins x11Module moduleSet = withIdentifier (UnsafeMakeID "combined") $ x11Module <> fold moduleSet
 
 data ModuleSpec = ModuleSpec
   { moduleType :: !(Maybe ModuleType)
@@ -132,11 +133,18 @@ instance FromYAML ModuleSpec where
       <*> (m .:? "environment" .!= M.empty)
       <*> (m .:? "dependencies" .!= [])
 
-readModuleSpec :: FilePath -> IO ModuleSpec
-readModuleSpec moduleDir = readYAMLFile userError (moduleDir </> "module.yaml")
+-- TODO IO Error handling & printing
+data ModuleError
+  = ModuleIOError FilePath IOError
+  | ModuleWrongFormat String
+  deriving (Show)
+instance Exception ModuleError
+
+readModuleSpec :: (Exception e) => (String -> e) -> FilePath -> IO ModuleSpec
+readModuleSpec asException moduleDir = readYAMLFile asException (moduleDir </> "module.yaml")
 
 loadModule :: FilePath -> IO (Component ModuleMode)
-loadModule moduleDir = moduleForSpec moduleDir <$> readModuleSpec moduleDir
+loadModule moduleDir = moduleForSpec moduleDir <$> readModuleSpec ModuleWrongFormat moduleDir
 
 moduleForSpec :: FilePath -> ModuleSpec -> Component ModuleMode
 moduleForSpec moduleDir spec =

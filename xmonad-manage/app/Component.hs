@@ -126,8 +126,9 @@ remove env MkComponent{..} = do
   printf "Running custom removal process...\n"
   handle env (Custom Remove)
 
-invoke :: env -> mode -> ComponentCat mode env () -> IO ()
+invoke :: Show mode => env -> mode -> ComponentCat mode env () -> IO ()
 invoke env mode MkComponent{..} = do
+  printf "Invoked component in mode %s.\n" (show mode)
   handle env (InvokeOn mode)
 
 -- | Make scripts executable, and returns the scripts.

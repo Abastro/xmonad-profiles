@@ -57,7 +57,6 @@ data ProfileError
     ProfileIOError FilePath IOError
   | ProfileWrongFormat String
   deriving (Show)
-
 instance Exception ProfileError
 
 readProfileSpec :: FilePath -> IO ProfileSpec

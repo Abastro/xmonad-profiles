@@ -118,16 +118,16 @@ handleOption mEnv@ManageEnv{..} profiles = \case
 
   -- Main installation
   Setup installCond -> do
-    activeCfg <- loadActiveCfg mEnv
+    specifiedModules <- specifiedActiveModules mEnv =<< loadActiveCfg mEnv
 
     putStrLn "Active modules to install:"
-    activeModuleData mEnv activeCfg >>= printActive
+    printActive specifiedModules
     putStrLn "Proceed? (Ctrl+C to cancel)"
     _ <- getLine
 
-    modules <- activeModules mEnv x11Module activeCfg
+    let combined = combineWithBuiltins x11Module specifiedModules
     pkgData <- loadPackageData mEnv
-    install mEnv pkgData installCond (mconcat modules)
+    install mEnv pkgData installCond combined
 
   -- Lists installed profiles
   ListProf -> do
@@ -163,12 +163,10 @@ handleOption mEnv@ManageEnv{..} profiles = \case
 
   -- Automatic profile run
   RunProf profID -> withProfPath profID $ \cfgPath -> do
-    redirectLogs
-    withCurrentDirectory home $ do
-      -- PATH needs updating
-      updatePATH home
-      modules <- activeModules mEnv x11Module =<< loadActiveCfg mEnv
-      invoke mEnv Start (mconcat modules)
+    redirectLogs >> updatePATH home -- PATH needs updating
+    withCurrentDirectory home $ do      
+      modules <- specifiedActiveModules mEnv =<< loadActiveCfg mEnv
+      invoke mEnv Start (combineWithBuiltins x11Module modules)
 
       putStrLn "Booting xmonad..."
       invoke mEnv RunMode =<< loadProfile cfgPath
@@ -177,13 +175,13 @@ handleOption mEnv@ManageEnv{..} profiles = \case
       Nothing -> throwIO (ProfileNotFound profID)
       Just profilePath -> act profilePath
 
-    printActive :: ModuleSet ModuleSpec -> IO ()
+    printActive :: ModuleSet (Component ModuleMode) -> IO ()
     printActive modules = do
       for_ [minBound .. maxBound] $ \typ -> do
         case modules.typedModules M.!? typ of
-          Just mod -> printf "%s: %s\n" (show typ) mod.name
+          Just mod -> printf "%s: %s\n" (show typ) (show mod.identifier)
           Nothing -> printf "%s: None\n" (show typ)
-      printf "Others: %s\n" $ show $ (\mod -> mod.name) <$> modules.otherModules
+      printf "Others: %s\n" $ show $ (\mod -> mod.identifier) <$> modules.otherModules
 
     updatePATH :: FilePath -> IO ()
     updatePATH home = do
