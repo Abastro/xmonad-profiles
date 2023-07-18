@@ -4,11 +4,12 @@ module Component (
   ComponentCat (..),
   Component,
   traversing,
-  between,
+  traversing_,
+  asks,
   install,
   remove,
   invoke,
-  fromScript,
+  executableScripts,
   ofHandle,
   ofAction,
   ofDependencies,
@@ -25,6 +26,7 @@ import Text.Printf
 data SetupPhase = Install | Remove
   deriving (Eq, Show, Enum, Bounded)
 data Context mode = Custom SetupPhase | InvokeOn mode
+  deriving (Eq, Show)
 
 -- | A unit of installation. Can be conveniently merged.
 --
@@ -73,8 +75,16 @@ traversing :: (Traversable t) => ComponentCat mode a b -> ComponentCat mode (t a
 traversing transform =
   transform{handle = \col ctxt -> traverse (\x -> transform.handle x ctxt) col}
 
-between :: ComponentCat mode env a -> ComponentCat mode a b -> ComponentCat mode a c -> ComponentCat mode env c
-between pre post inside = pre >>> (inside <* post)
+traversing_ :: (Foldable t) => ComponentCat mode a b -> ComponentCat mode (t a) ()
+traversing_ transform =
+  transform{handle = \col ctxt -> traverse_ (\x -> transform.handle x ctxt) col}
+
+asks :: (Context mode -> a) -> ComponentCat mode env a
+asks f =
+  MkComponent
+    { dependencies = []
+    , handle = \_ ctxt -> pure (f ctxt)
+    }
 
 install :: ManageEnv -> PackageData -> InstallCond -> ComponentCat mode ManageEnv () -> IO ()
 install env pkgData cond MkComponent{..} = do
@@ -95,21 +105,17 @@ invoke :: env -> mode -> ComponentCat mode env () -> IO ()
 invoke env mode MkComponent{..} = do
   handle env (InvokeOn mode)
 
--- | Make a component from script, which uses given script executor.
-fromScript ::
+-- | Make scripts executable, and returns the scripts.
+executableScripts ::
   (Enum mode, Bounded mode) =>
-  (env -> FilePath -> Context mode -> IO ()) ->
   (Context mode -> Maybe FilePath) ->
-  ComponentCat mode env ()
-fromScript executor scripts = makeExecutable <> executeScripts
+  ComponentCat mode env (Maybe FilePath)
+executableScripts scripts = makeExecutable *> asks scripts
   where
-    allCtxt = (Custom <$> [minBound .. maxBound]) <> (InvokeOn <$> [minBound .. maxBound])
     makeExecutable = ofHandle $ \_ -> \case
-      Custom Install -> do
-        traverse_ setToExecutable (mapMaybe scripts allCtxt)
+      Custom Install -> traverse_ setToExecutable $ mapMaybe scripts allCtxt
       _ -> pure ()
-    executeScripts = ofHandle $ \env ctxt -> do
-      for_ (scripts ctxt) $ \script -> executor env script ctxt
+    allCtxt = (Custom <$> [minBound .. maxBound]) <> (InvokeOn <$> [minBound .. maxBound])
 
 ofHandle :: (env -> Context mode -> IO a) -> ComponentCat mode env a
 ofHandle handle = MkComponent{dependencies = [], handle}

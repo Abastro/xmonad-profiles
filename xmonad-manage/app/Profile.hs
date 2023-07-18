@@ -93,10 +93,10 @@ profileForSpec configDir spec = profile
               , ofHandle setupEnvironment
               , serviceModule spec
               ]
-        , scripts
+        , scripts >>> traversing_ (ofHandle executeScript)
         , buildOnInstall
         ]
-    scripts = fromScript executeScript $ \case
+    scripts = executableScripts $ \case
       Custom Install -> cfgFor <$> spec.installScript
       Custom Remove -> Nothing
       InvokeOn BuildMode -> Just (cfgFor spec.buildScript)
@@ -109,8 +109,8 @@ profileForSpec configDir spec = profile
       _ -> pure ()
 
 -- | Executes the respective script, case-by-case basis since given args could be changed.
-executeScript :: ManageEnv -> FilePath -> Context ProfileMode -> IO ()
-executeScript _ script = \case
+executeScript :: FilePath -> Context ProfileMode -> IO ()
+executeScript script = \case
   Custom phase -> do
     case phase of
       Install -> printf "Install using %s...\n" script

@@ -139,19 +139,22 @@ loadModule :: FilePath -> IO (Component ModuleMode)
 loadModule moduleDir = moduleForSpec moduleDir <$> readModuleSpec moduleDir
 
 moduleForSpec :: FilePath -> ModuleSpec -> Component ModuleMode
-moduleForSpec moduleDir spec = deps <> setupEnv <> scripts
+moduleForSpec moduleDir spec =
+  mconcat
+    [ ofDependencies spec.dependencies
+    , ofHandle (setupEnvironment spec)
+    , scripts >>> traversing_ (ofHandle $ executeScript spec)
+    ]
   where
-    deps = ofDependencies spec.dependencies
-    scripts = fromScript (executeScript spec) $ \case
+    scripts = executableScripts $ \case
       Custom Install -> scriptFor <$> spec.install
       Custom Remove -> Nothing
       InvokeOn Start -> Just (scriptFor spec.run)
 
-    setupEnv = ofHandle (setupEnvironment spec)
     scriptFor path = moduleDir </> path
 
-executeScript :: ModuleSpec -> ManageEnv -> FilePath -> Context ModuleMode -> IO ()
-executeScript spec _ script = \case
+executeScript :: ModuleSpec -> FilePath -> Context ModuleMode -> IO ()
+executeScript spec script = \case
   Custom Install -> do
     printf "[%s] Module installation using %s...\n" spec.name script
     callProcess script []
