@@ -7,7 +7,7 @@ module Common (
   thisInstallDirectory,
   setToExecutable,
   withTemporaryDirectory,
-  ID,
+  ID (UnsafeMakeID),
   idStr,
   makeID,
   makeIDM,
@@ -61,13 +61,13 @@ withTemporaryDirectory = bracket makeTempDir removePathForcibly
       pure tempDir
 
 -- | Denotes ID, made of ASCII letters w/o space
-newtype ID = ID String deriving newtype (Show, Eq, Ord, Serialize)
+newtype ID = UnsafeMakeID String deriving newtype (Show, Eq, Ord, Serialize)
 
 idStr :: ID -> String
 idStr = coerce
 
 makeID :: String -> Maybe ID
-makeID ident = ID ident <$ guard (all isAscii ident && not (any isSpace ident))
+makeID ident = UnsafeMakeID ident <$ guard (all isAscii ident && not (any isSpace ident))
 
 makeIDM :: (MonadFail f) => String -> f ID
 makeIDM ident = maybe (fail failMsg) pure $ makeID ident

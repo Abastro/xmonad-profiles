@@ -86,15 +86,22 @@ xsettingsText cfg = T.unlines $ do
 
 data ThisEnv = ThisEnv !FilePath !DisplayConfig !FilePath
 
-x11Module :: Component ModuleMode
-x11Module = xmonadDeps <> (getConfig >>> xresources <> xsettingsd) <> xsetup
+x11Module :: ComponentCat ModuleMode ManageEnv ()
+x11Module = designator <> xmonadDeps <> (getConfig >>> xresources <> xsettingsd) <> xsetup
   where
+    designator = ofIdentifier (UnsafeMakeID "X11")
     xmonadDeps = ofDependencies [AsPackage "libxss", AsPackage "xmonad"]
-    xresources = ofHandle handleXresources
-    xsettingsd = MkComponent{dependencies = [AsPackage "xsettingsd"], handle = handleXsettings}
+    xresources = ofIdentifier (UnsafeMakeID "xresources") <> ofHandle handleXresources
+    xsettingsd =
+      MkComponent
+        { dependencies = [AsPackage "xsettingsd"]
+        , identifier = UnsafeMakeID "xsettings"
+        , handle = handleXsettings
+        }
     xsetup =
       MkComponent
         { dependencies = [AsPackage "xsetroot"]
+        , identifier = UnsafeMakeID "xsetup"
         , handle = \_ -> \case
             InvokeOn Start -> do
               callProcess "xrandr" []

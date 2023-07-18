@@ -146,23 +146,23 @@ handleOption mEnv@ManageEnv{..} profiles = \case
         cfgPath <- canonicalizePath idOrPath
         cfgPath <$ printf "Installing profile from path %s...\n" cfgPath
     pkgData <- loadPackageData mEnv
-    (profile, ident) <- loadProfile cfgPath
+    profile <- loadProfile cfgPath
     install mEnv pkgData installCond profile
-    let addProfile = M.insert ident cfgPath
+    let addProfile = M.insert profile.identifier cfgPath
     varMS $~ \saved@ManageSaved{profiles} -> saved{profiles = addProfile profiles}
 
   -- Remove a profile
   RemoveProf ident -> do
     cfgPath <- getProfile ident
-    -- Does not care about profile's own ID
-    (profile, _) <- loadProfile cfgPath
+    profile <- loadProfile cfgPath
     remove mEnv profile
+    -- Does not care about profile's own ID if it has changed.
     let rmProfile = M.delete ident
     varMS $~ \saved@ManageSaved{profiles} -> saved{profiles = rmProfile profiles}
 
   -- Manually build profile
   BuildProf profID -> withProfPath profID $ \cfgPath -> do
-    (profile, _) <- loadProfile cfgPath
+    profile <- loadProfile cfgPath
     invoke mEnv BuildMode profile
 
   -- Automatic profile run
@@ -175,7 +175,7 @@ handleOption mEnv@ManageEnv{..} profiles = \case
       invoke mEnv Start (mconcat modules)
 
       putStrLn "Booting xmonad..."
-      (profile, _) <- loadProfile cfgPath
+      profile <- loadProfile cfgPath
       invoke mEnv RunMode profile
   where
     getProfile profID =

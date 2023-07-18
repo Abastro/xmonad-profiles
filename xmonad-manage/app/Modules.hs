@@ -141,7 +141,8 @@ loadModule moduleDir = moduleForSpec moduleDir <$> readModuleSpec moduleDir
 moduleForSpec :: FilePath -> ModuleSpec -> Component ModuleMode
 moduleForSpec moduleDir spec =
   mconcat
-    [ ofDependencies spec.dependencies
+    [ ofIdentifier (UnsafeMakeID $ T.unpack spec.name)
+    , ofDependencies spec.dependencies
     , ofHandle (setupEnvironment spec)
     , scripts >>> traversing_ (ofHandle $ executeScript spec)
     ]

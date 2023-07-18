@@ -13,6 +13,7 @@ module Component (
   ofHandle,
   ofAction,
   ofDependencies,
+  ofIdentifier,
 ) where
 
 import Common
@@ -33,39 +34,49 @@ data Context mode = Custom SetupPhase | InvokeOn mode
 -- When merged, former component is executed first.
 --
 -- Also implements Applicative and Category as well to make piping possible.
+--
+-- Currently, supports packages and ID specification for the component.
+-- (ID is decided by the first component)
 data ComponentCat mode env a = MkComponent
-  { dependencies :: [Package]
+  { dependencies :: ![Package]
+  , identifier :: !ID
   , handle :: env -> Context mode -> IO a
   }
 
 type Component mode = ComponentCat mode ManageEnv ()
 
+instance Show (ComponentCat mode env a) where
+  show :: ComponentCat mode env a -> String
+  show MkComponent{..} = printf "Component{ identifier=%s, dependencies=%s }" (show identifier) (show dependencies)
+
 instance (Semigroup a) => Semigroup (ComponentCat mode r a) where
   (<>) :: (Semigroup a) => ComponentCat mode r a -> ComponentCat mode r a -> ComponentCat mode r a
-  MkComponent dep han <> MkComponent dep' han' = MkComponent (dep <> dep') (han <> han')
+  MkComponent dep ident han <> MkComponent dep' _ han' = MkComponent (dep <> dep') ident (han <> han')
 instance (Monoid a) => Monoid (ComponentCat mode r a) where
   mempty :: (Monoid a) => ComponentCat mode r a
-  mempty = MkComponent mempty mempty
+  mempty = MkComponent mempty (UnsafeMakeID "") mempty
 
 instance Functor (ComponentCat mode r) where
   fmap :: (a -> b) -> ComponentCat mode r a -> ComponentCat mode r b
   fmap = liftA
 instance Applicative (ComponentCat mode r) where
   pure :: a -> ComponentCat mode r a
-  pure ret = MkComponent [] (\_ _ -> pure ret)
+  pure ret = MkComponent [] (UnsafeMakeID "pure") (\_ _ -> pure ret)
   (<*>) :: ComponentCat mode r (a -> b) -> ComponentCat mode r a -> ComponentCat mode r b
   f <*> x =
     MkComponent
       { dependencies = f.dependencies <> x.dependencies
+      , identifier = f.identifier
       , handle = \env ctxt -> f.handle env ctxt <*> x.handle env ctxt
       }
 instance Category (ComponentCat mode) where
   id :: ComponentCat mode a a
-  id = MkComponent [] (\x _ -> pure x)
+  id = MkComponent [] (UnsafeMakeID "id") (\x _ -> pure x)
   (.) :: ComponentCat mode b c -> ComponentCat mode a b -> ComponentCat mode a c
   g . f =
     MkComponent
       { dependencies = f.dependencies <> g.dependencies
+      , identifier = f.identifier
       , handle = \x ctxt -> do
           y <- f.handle x ctxt
           g.handle y ctxt
@@ -83,6 +94,7 @@ asks :: (Context mode -> a) -> ComponentCat mode env a
 asks f =
   MkComponent
     { dependencies = []
+    , identifier = UnsafeMakeID "asks"
     , handle = \_ ctxt -> pure (f ctxt)
     }
 
@@ -118,10 +130,13 @@ executableScripts scripts = makeExecutable *> asks scripts
     allCtxt = (Custom <$> [minBound .. maxBound]) <> (InvokeOn <$> [minBound .. maxBound])
 
 ofHandle :: (env -> Context mode -> IO a) -> ComponentCat mode env a
-ofHandle handle = MkComponent{dependencies = [], handle}
+ofHandle handle = MkComponent{dependencies = [], identifier = UnsafeMakeID "handler", handle}
 
 ofAction :: (env -> IO a) -> ComponentCat mode env a
 ofAction action = ofHandle $ \env _ -> action env
 
 ofDependencies :: [Package] -> ComponentCat mode env ()
-ofDependencies dependencies = MkComponent{dependencies, handle = mempty}
+ofDependencies dependencies = MkComponent{dependencies, identifier = UnsafeMakeID "dependencies", handle = mempty}
+
+ofIdentifier :: ID -> ComponentCat mode env ()
+ofIdentifier identifier = MkComponent{dependencies = [], identifier, handle = mempty}

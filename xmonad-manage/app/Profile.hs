@@ -75,17 +75,16 @@ data Directories = MkDirectories
   deriving (Show)
 
 -- | Load profile with its ID.
-loadProfile :: FilePath -> IO (Component ProfileMode, ID)
-loadProfile configDir = do
-  spec <- readProfileSpec configDir
-  pure (profileForSpec configDir spec, spec.profileID)
+loadProfile :: FilePath -> IO (Component ProfileMode)
+loadProfile configDir = profileForSpec configDir <$> readProfileSpec configDir
 
 profileForSpec :: FilePath -> ProfileSpec -> Component ProfileMode
 profileForSpec configDir spec = profile
   where
     profile =
       mconcat
-        [ ofDependencies spec.dependencies
+        [ ofIdentifier spec.profileID
+        , ofDependencies spec.dependencies
         , ofAction (getDirectories configDir spec)
             >>> mconcat
               [ ofHandle prepareProfileDirs
