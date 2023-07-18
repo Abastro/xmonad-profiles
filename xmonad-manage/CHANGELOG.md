@@ -7,6 +7,7 @@
   - There were issues with inheriting the environment variables.
 - Logs are redirected on `xmonad-manage run` to `./logs`.
   - On the beginning before redirection, look into session error directories like `~/.xsession-errors`.
+- Easier to reinstall an existing profile by specifying profile path.
 
 ## 0.7.2
 - **! Recommends running `xmonad-manage setup` and re-installing your profile !**

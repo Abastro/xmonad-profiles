@@ -64,8 +64,8 @@ manageOpts =
           Opts.info (pure ListProf) $
             Opts.progDesc "Lists installed profiles."
       , Opts.command "install" $
-          Opts.info (InstallProf <$> pathArg "<profile-path>" <*> installCond) $
-            Opts.progDesc "Installs a profile."
+          Opts.info (InstallProf <$> pathArg "<profile-id|profile-path>" <*> installCond) $
+            Opts.progDesc "Installs or Re-installs a profile."
       , Opts.command "remove" $
           Opts.info (RemoveProf <$> profIdArg) $
             Opts.progDesc "Removes a profile. Does not remove the installed packages or cache files in '.cabal/store'."
@@ -84,7 +84,7 @@ manageOpts =
       Opts.flag WhenAbsent AlwaysInstall $
         Opts.long "always-install"
           <> Opts.short 'a'
-          <> Opts.help "Run installation regardless of whether it was installed or not."
+          <> Opts.help "Run package installation regardless of whether it was installed or not."
 
 -- | The manager program. Current directory needs to be the profile main directory.
 main :: IO ()
@@ -139,8 +139,12 @@ handleOption mEnv@ManageEnv{..} profiles = \case
       printf "    %s\n" profileProps.profileDetails
 
   -- Profile-specific installation
-  InstallProf rawPath installCond -> do
-    cfgPath <- canonicalizePath rawPath
+  InstallProf idOrPath installCond -> do
+    cfgPath <- case (profiles M.!?) =<< makeID idOrPath of
+      Just cfgPath -> cfgPath <$ printf "Re-installing profile %s...\n" idOrPath
+      Nothing -> do
+        cfgPath <- canonicalizePath idOrPath
+        cfgPath <$ printf "Installing profile from path %s...\n" cfgPath
     pkgData <- loadPackageData mEnv
     (profile, ident) <- loadProfile cfgPath
     install mEnv pkgData installCond profile
@@ -193,7 +197,6 @@ handleOption mEnv@ManageEnv{..} profiles = \case
     updatePATH home = do
       path <- getEnv "PATH"
       -- Blame ghcup for not putting environment inside .profile, duh
-      -- ? Maybe check if these are added in PATH beforehand
       let newPath =
             intercalate
               ":"
