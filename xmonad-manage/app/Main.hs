@@ -200,12 +200,12 @@ handleOption mEnv@ManageEnv{..} profiles = \case
 
     redirectLogs :: IO ()
     redirectLogs = do
-      let logPath = envPath </> "logs"
+      logDir <- getXdgDirectory XdgState "xmonad-manage"
       -- Redirect stdout/stderr elsewhere; lightdm is being goofy about it..
       -- You need to look into ~/.xsession-errors if something happens beforehand.
-      createDirectoryIfMissing True logPath
-      handleOut <- openFile (logPath </> "start.out") WriteMode
-      handleErr <- openFile (logPath </> "start.err") WriteMode
+      createDirectoryIfMissing True logDir
+      handleOut <- openFile (logDir </> "start.out") WriteMode
+      handleErr <- openFile (logDir </> "start.err") WriteMode
 
       hDuplicateTo handleOut stdout
       hDuplicateTo handleErr stderr

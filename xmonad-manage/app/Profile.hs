@@ -108,10 +108,11 @@ profileForSpec configDir spec = profile
 -- | Executes the respective script, case-by-case basis since given args could be changed.
 executeScript :: FilePath -> Context ProfileMode -> IO ()
 executeScript script = \case
-  Custom phase -> do
-    case phase of
-      Install -> printf "Install using %s...\n" script
-      Remove -> printf "Remove using %s...\n" script
+  Custom Install -> do
+    printf "Install using %s...\n" script
+    callProcess script []
+  Custom Remove -> do
+    printf "Remove using %s...\n" script
     callProcess script []
   InvokeOn BuildMode -> do
     -- It would be great to log to journal, but eh.. not needed anyway.
@@ -130,16 +131,11 @@ environments dirs =
 
 getDirectories :: FilePath -> ProfileSpec -> ManageEnv -> IO Directories
 getDirectories configDir spec mEnv = do
+  dataDir <- getXdgDirectory XdgData (idStr spec.profileID)
+  -- Apparently the executable is a cache..
+  cacheDir <- getXdgDirectory XdgCache (idStr spec.profileID)
   serviceDir <- getServiceDirectory PerUserService
-  let locFor str = mEnv.envPath </> str </> idStr spec.profileID
-  pure
-    MkDirectories
-      { configDir
-      , dataDir = locFor "data"
-      , cacheDir = locFor "cache"
-      , serviceDir
-      , databaseDir = mEnv.envPath </> "database"
-      }
+  pure MkDirectories{databaseDir = mEnv.envPath </> "database", ..}
 
 prepareProfileDirs :: Directories -> Context a -> IO ()
 prepareProfileDirs dirs = \case
