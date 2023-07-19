@@ -23,6 +23,7 @@ import System.FilePath
 import System.IO
 import Text.Printf
 import X11
+import Data.Proxy
 
 -- * Fetches from separate configuration directory for each profile.
 
@@ -91,7 +92,7 @@ main = (`catch` handleError) $ do
   hSetBuffering stdout LineBuffering -- For consistent line buffering
   home <- getHomeDirectory
 
-  ManageSaved{managePath = envPath, profiles} <- get varMS
+  ManageSaved{managePath = envPath, profiles} <- get (savedVar @ManageSaved)
   Opts.customExecParser optPrefs manageOpts >>= handleOption ManageEnv{..} profiles
   where
     handleError = \case
@@ -112,7 +113,7 @@ handleOption mEnv@ManageEnv{..} profiles = \case
   -- Resets the save if corrupted
   ResetSave -> do
     putStrLn "*** Resetting save, data could be lost! ***"
-    restoreMS
+    restore (Proxy @ManageSaved)
     putStrLn "Save reset."
 
   -- Main installation
@@ -148,13 +149,13 @@ handleOption mEnv@ManageEnv{..} profiles = \case
     profile <- loadProfile cfgPath
     install mEnv pkgData installCond profile
     let addProfile = M.insert profile.identifier cfgPath
-    varMS $~ \saved@ManageSaved{profiles} -> saved{profiles = addProfile profiles}
+    savedVar @ManageSaved $~ \saved@ManageSaved{profiles} -> saved{profiles = addProfile profiles}
 
   -- Remove a profile
   RemoveProf profID -> withProfPath profID $ \cfgPath -> do
     remove mEnv =<< loadProfile cfgPath
     let rmProfile = M.delete profID -- Does not care about profile's own ID if it has changed.
-    varMS $~ \saved@ManageSaved{profiles} -> saved{profiles = rmProfile profiles}
+    savedVar @ManageSaved $~ \saved@ManageSaved{profiles} -> saved{profiles = rmProfile profiles}
 
   -- Manually build profile
   BuildProf profID -> withProfPath profID $ \cfgPath -> do

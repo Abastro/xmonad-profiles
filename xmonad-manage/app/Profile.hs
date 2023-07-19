@@ -12,9 +12,11 @@ import Component
 import Control.Exception
 import Data.Foldable
 import Data.Map.Strict qualified as M
+import Data.Serialize
 import Data.Text qualified as T
 import Data.Text.IO qualified as T
 import Data.YAML
+import GHC.Generics
 import Manages
 import Packages
 import System.Directory
@@ -22,6 +24,12 @@ import System.FilePath
 import System.Info (arch, os)
 import System.Process
 import Text.Printf
+
+newtype InstalledProfiles = InstalledProfiles
+  { profiles :: M.Map ID FilePath
+  }
+  deriving (Show, Generic)
+instance Serialize InstalledProfiles
 
 data ProfileProps = ProfileProps
   { profileName :: !T.Text

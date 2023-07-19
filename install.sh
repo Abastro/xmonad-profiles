@@ -14,4 +14,7 @@ cabal install "exe:xmonad-manage" --overwrite-policy=always \
 echo "Installing to /opt/bin/xmonad-manage..."
 sudo mkdir -p /opt/bin
 sudo mv "$tmpdir/xmonad-manage" /opt/bin
+
+# Checkup run
+/opt/bin/xmonad-manage --help
 echo "Done."

@@ -1,8 +1,9 @@
 module Manages (
+  SavedData (..),
+  savedVar,
+  restore,
   ManageSaved (..),
   ManageEnv (..),
-  varMS,
-  restoreMS,
   loadConfig,
 )
 where
@@ -13,6 +14,7 @@ import Control.Exception
 import Control.Monad
 import Data.ByteString.Lazy qualified as B
 import Data.Map.Strict qualified as M
+import Data.Proxy
 import Data.Serialize
 import Data.StateVar
 import GHC.Generics (Generic)
@@ -21,54 +23,54 @@ import System.FilePath
 import System.IO
 import Text.Printf
 
+class (Serialize a) => SavedData a where
+  dataName :: Proxy a -> FilePath
+  initialize :: IO a
+
+savedVar :: forall a. (SavedData a) => StateVar a
+savedVar = makeStateVar load save
+  where
+    load = do
+      savePath <- datPath
+      let readAsA = withFile savePath ReadMode (evaluate <=< fmap decodeLazy . B.hGetContents)
+      readAsA <|> pure (Left "error") >>= \case
+        Right saved -> pure saved
+        Left _ -> do
+          defVal <- initialize
+          defVal <$ B.writeFile savePath (encodeLazy defVal)
+    save saved = do
+      savePath <- datPath
+      B.writeFile savePath (encodeLazy saved)
+
+    datPath = do
+      dataDir <- getXdgDirectory XdgData "xmonad-manage"
+      createDirectoryIfMissing True dataDir
+      pure $ dataDir </> dataName (Proxy @a)
+
+restore :: forall a. (SavedData a) => Proxy a -> IO ()
+restore Proxy = initialize @a >>= (savedVar $=)
+
 data ManageSaved = ManageSaved
   { managePath :: !FilePath
   , profiles :: !(M.Map ID FilePath)
-  , startupDir :: !FilePath
   }
   deriving (Show, Generic)
 
 instance Serialize ManageSaved
+instance SavedData ManageSaved where
+  dataName :: Proxy ManageSaved -> FilePath
+  dataName Proxy = "manage-data"
+  initialize :: IO ManageSaved
+  initialize = do
+    putStrLn "Manager path not yet specified, setting to current directory"
+    managePath <- getCurrentDirectory
+    pure $ ManageSaved{managePath, profiles = M.empty}
 
 data ManageEnv = ManageEnv
   { envPath :: !FilePath
   , home :: !FilePath
   -- ^ Home directory for easier referencing
   }
-
-mkMS :: IO ManageSaved
-mkMS = do
-  putStrLn "Manager path not yet specified, setting to current directory"
-  managePath <- getCurrentDirectory
-  pure $ ManageSaved{managePath, profiles = M.empty, startupDir = managePath </> "start-lightdm"}
-
-varMS :: StateVar ManageSaved
-restoreMS :: IO ()
-(varMS, restoreMS) = dataVar "xmonad-manage" "manage-data" mkMS
-
--- | Data variable stored in XDG_DATA_DIR, with an action to reset it to default.
-dataVar :: (Serialize a) => String -> String -> IO a -> (StateVar a, IO ())
-dataVar appName varName mkDef = (var, restore)
-  where
-    var = makeStateVar load save
-    restore = mkDef >>= (var $=)
-    load = do
-      msave <- datPath
-      let readAsA = withFile msave ReadMode (evaluate <=< fmap decodeLazy . B.hGetContents)
-      readAsA <|> pure (Left "") >>= \case
-        Right saved -> pure saved
-        Left _ -> do
-          defVal <- mkDef
-          defVal <$ B.writeFile msave (encodeLazy defVal)
-    save saved = do
-      msave <- datPath
-      B.writeFile msave (encodeLazy saved)
-
-    datPath = do
-      dataDir <- getXdgDirectory XdgData appName
-      createDirectoryIfMissing True dataDir
-      (dataDir </> varName) <$ setPermissions dataDir perm
-    perm = setOwnerSearchable True . setOwnerReadable True . setOwnerWritable True $ emptyPermissions
 
 -- | Loads configuration from /config folder, and copies the template if it fails.
 loadConfig :: ManageEnv -> String -> (FilePath -> IO a) -> IO a
