@@ -113,7 +113,8 @@ handleOption mEnv@ManageEnv{..} = \case
   -- Resets the save if corrupted
   ResetSave -> do
     putStrLn "*** Resetting save, data could be lost! ***"
-    restore (Proxy @ManageSaved)
+    restore $ Proxy @ManageSaved
+    restore $ Proxy @InstalledProfiles
     putStrLn "Save reset."
 
   -- Main installation
