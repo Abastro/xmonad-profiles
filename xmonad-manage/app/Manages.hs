@@ -13,7 +13,6 @@ import Control.Applicative
 import Control.Exception
 import Control.Monad
 import Data.ByteString.Lazy qualified as B
-import Data.Map.Strict qualified as M
 import Data.Proxy
 import Data.Serialize
 import Data.StateVar
@@ -38,9 +37,9 @@ savedVar = makeStateVar load save
         Left _ -> do
           defVal <- initialize
           defVal <$ B.writeFile savePath (encodeLazy defVal)
-    save saved = do
+    save dat = do
       savePath <- datPath
-      B.writeFile savePath (encodeLazy saved)
+      B.writeFile savePath (encodeLazy dat)
 
     datPath = do
       dataDir <- getXdgDirectory XdgData "xmonad-manage"
@@ -50,10 +49,7 @@ savedVar = makeStateVar load save
 restore :: forall a. (SavedData a) => Proxy a -> IO ()
 restore Proxy = initialize @a >>= (savedVar $=)
 
-data ManageSaved = ManageSaved
-  { managePath :: !FilePath
-  , profiles :: !(M.Map ID FilePath)
-  }
+newtype ManageSaved = ManageSaved {managePath :: FilePath}
   deriving (Show, Generic)
 
 instance Serialize ManageSaved
@@ -64,7 +60,7 @@ instance SavedData ManageSaved where
   initialize = do
     putStrLn "Manager path not yet specified, setting to current directory"
     managePath <- getCurrentDirectory
-    pure $ ManageSaved{managePath, profiles = M.empty}
+    pure $ ManageSaved{managePath}
 
 data ManageEnv = ManageEnv
   { envPath :: !FilePath

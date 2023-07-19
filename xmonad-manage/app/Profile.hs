@@ -1,4 +1,7 @@
 module Profile (
+  InstalledProfiles (..),
+  addProfile,
+  removeProfile,
   ProfileProps (..),
   ProfileSpec (..),
   ProfileError (..),
@@ -12,6 +15,7 @@ import Component
 import Control.Exception
 import Data.Foldable
 import Data.Map.Strict qualified as M
+import Data.Proxy
 import Data.Serialize
 import Data.Text qualified as T
 import Data.Text.IO qualified as T
@@ -29,7 +33,19 @@ newtype InstalledProfiles = InstalledProfiles
   { profiles :: M.Map ID FilePath
   }
   deriving (Show, Generic)
+
 instance Serialize InstalledProfiles
+instance SavedData InstalledProfiles where
+  dataName :: Proxy InstalledProfiles -> FilePath
+  dataName Proxy = "installed-profiles"
+  initialize :: IO InstalledProfiles
+  initialize = pure $ InstalledProfiles M.empty
+
+addProfile :: ID -> FilePath -> InstalledProfiles -> InstalledProfiles
+addProfile ident path ips = ips{profiles = M.insert ident path ips.profiles}
+
+removeProfile :: ID -> InstalledProfiles -> InstalledProfiles
+removeProfile ident ips = ips{profiles = M.delete ident ips.profiles}
 
 data ProfileProps = ProfileProps
   { profileName :: !T.Text

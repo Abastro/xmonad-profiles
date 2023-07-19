@@ -92,8 +92,8 @@ main = (`catch` handleError) $ do
   hSetBuffering stdout LineBuffering -- For consistent line buffering
   home <- getHomeDirectory
 
-  ManageSaved{managePath = envPath, profiles} <- get (savedVar @ManageSaved)
-  Opts.customExecParser optPrefs manageOpts >>= handleOption ManageEnv{..} profiles
+  ManageSaved{managePath = envPath} <- get (savedVar @ManageSaved)
+  Opts.customExecParser optPrefs manageOpts >>= handleOption ManageEnv{..}
   where
     handleError = \case
       ProfileNotFound profID -> do
@@ -108,8 +108,8 @@ main = (`catch` handleError) $ do
         hPrintf stderr "Details: %s\n" details
         exitWith (ExitFailure 3)
 
-handleOption :: ManageEnv -> M.Map ID FilePath -> Action -> IO ()
-handleOption mEnv@ManageEnv{..} profiles = \case
+handleOption :: ManageEnv -> Action -> IO ()
+handleOption mEnv@ManageEnv{..} = \case
   -- Resets the save if corrupted
   ResetSave -> do
     putStrLn "*** Resetting save, data could be lost! ***"
@@ -131,6 +131,7 @@ handleOption mEnv@ManageEnv{..} profiles = \case
 
   -- Lists installed profiles
   ListProf -> do
+    InstalledProfiles profiles <- get (savedVar @InstalledProfiles)
     putStrLn "Available profiles:"
     for_ (M.elems profiles) $ \cfgPath -> do
       ProfileSpec{..} <- readProfileSpec cfgPath
@@ -140,6 +141,7 @@ handleOption mEnv@ManageEnv{..} profiles = \case
 
   -- Profile-specific installation
   InstallProf idOrPath installCond -> do
+    InstalledProfiles profiles <- get (savedVar @InstalledProfiles)
     cfgPath <- case (profiles M.!?) =<< makeID idOrPath of
       Just cfgPath -> cfgPath <$ printf "Re-installing profile %s...\n" idOrPath
       Nothing -> do
@@ -148,14 +150,15 @@ handleOption mEnv@ManageEnv{..} profiles = \case
     pkgData <- loadPackageData mEnv
     profile <- loadProfile cfgPath
     install mEnv pkgData installCond profile
-    let addProfile = M.insert profile.identifier cfgPath
-    savedVar @ManageSaved $~ \saved@ManageSaved{profiles} -> saved{profiles = addProfile profiles}
+    savedVar @InstalledProfiles $~ addProfile profile.identifier cfgPath
+    --let addProfile = M.insert profile.identifier cfgPath
+    --savedVar @ManageSaved $~ \saved@ManageSaved{profiles} -> saved{profiles = addProfile profiles}
 
   -- Remove a profile
   RemoveProf profID -> withProfPath profID $ \cfgPath -> do
+    -- Profile is marked removed first to avoid considering broken installs as valid
+    savedVar @InstalledProfiles $~ removeProfile profID
     remove mEnv =<< loadProfile cfgPath
-    let rmProfile = M.delete profID -- Does not care about profile's own ID if it has changed.
-    savedVar @ManageSaved $~ \saved@ManageSaved{profiles} -> saved{profiles = rmProfile profiles}
 
   -- Manually build profile
   BuildProf profID -> withProfPath profID $ \cfgPath -> do
@@ -171,9 +174,11 @@ handleOption mEnv@ManageEnv{..} profiles = \case
       putStrLn "Booting xmonad..."
       invoke mEnv RunMode =<< loadProfile cfgPath
   where
-    withProfPath profID act = case profiles M.!? profID of
-      Nothing -> throwIO (ProfileNotFound profID)
-      Just profilePath -> act profilePath
+    withProfPath profID act = do
+      InstalledProfiles profiles <- get (savedVar @InstalledProfiles)
+      case profiles M.!? profID of
+        Nothing -> throwIO (ProfileNotFound profID)
+        Just profilePath -> act profilePath
 
     printActive :: ModuleSet (Component ModuleMode) -> IO ()
     printActive modules = do
