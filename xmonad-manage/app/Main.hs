@@ -1,4 +1,7 @@
 {-# LANGUAGE CPP #-}
+{-# OPTIONS_GHC -Wno-unrecognised-pragmas #-}
+
+{-# HLINT ignore "Redundant <$>" #-}
 
 module Main (main) where
 
@@ -8,6 +11,7 @@ import Control.Exception
 import Data.Foldable
 import Data.List
 import Data.Map.Strict qualified as M
+import Data.Proxy
 import Data.StateVar
 import Data.Text qualified as T
 import GHC.IO.Handle
@@ -23,7 +27,6 @@ import System.FilePath
 import System.IO
 import Text.Printf
 import X11
-import Data.Proxy
 
 -- * Fetches from separate configuration directory for each profile.
 
@@ -132,9 +135,9 @@ handleOption mEnv@ManageEnv{..} = \case
 
   -- Lists installed profiles
   ListProf -> do
-    InstalledProfiles profiles <- get (savedVar @InstalledProfiles)
+    profiles <- profilePaths <$> get (savedVar @InstalledProfiles)
     putStrLn "Available profiles:"
-    for_ (M.elems profiles) $ \cfgPath -> do
+    for_ profiles $ \cfgPath -> do
       ProfileSpec{..} <- readProfileSpec cfgPath
       printf "- %s (%s)\n" (idStr profileID) profileProps.profileName
       printf "    Config at: %s\n" cfgPath
@@ -142,8 +145,8 @@ handleOption mEnv@ManageEnv{..} = \case
 
   -- Profile-specific installation
   InstallProf idOrPath installCond -> do
-    InstalledProfiles profiles <- get (savedVar @InstalledProfiles)
-    cfgPath <- case (profiles M.!?) =<< makeID idOrPath of
+    ips <- get (savedVar @InstalledProfiles)
+    cfgPath <- case (`getProfilePath` ips) =<< makeID idOrPath of
       Just cfgPath -> cfgPath <$ printf "Re-installing profile %s...\n" idOrPath
       Nothing -> do
         cfgPath <- canonicalizePath idOrPath
@@ -152,8 +155,6 @@ handleOption mEnv@ManageEnv{..} = \case
     profile <- loadProfile cfgPath
     install mEnv pkgData installCond profile
     savedVar @InstalledProfiles $~ addProfile profile.identifier cfgPath
-    --let addProfile = M.insert profile.identifier cfgPath
-    --savedVar @ManageSaved $~ \saved@ManageSaved{profiles} -> saved{profiles = addProfile profiles}
 
   -- Remove a profile
   RemoveProf profID -> withProfPath profID $ \cfgPath -> do
@@ -168,7 +169,7 @@ handleOption mEnv@ManageEnv{..} = \case
   -- Automatic profile run
   RunProf profID -> withProfPath profID $ \cfgPath -> do
     redirectLogs >> updatePATH home -- PATH needs updating
-    withCurrentDirectory home $ do      
+    withCurrentDirectory home $ do
       modules <- specifiedActiveModules mEnv =<< loadActiveCfg mEnv
       invoke mEnv Start (combineWithBuiltins x11Module modules)
 
@@ -176,8 +177,8 @@ handleOption mEnv@ManageEnv{..} = \case
       invoke mEnv RunMode =<< loadProfile cfgPath
   where
     withProfPath profID act = do
-      InstalledProfiles profiles <- get (savedVar @InstalledProfiles)
-      case profiles M.!? profID of
+      ips <- get (savedVar @InstalledProfiles)
+      case getProfilePath profID ips of
         Nothing -> throwIO (ProfileNotFound profID)
         Just profilePath -> act profilePath
 

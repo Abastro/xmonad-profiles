@@ -1,7 +1,9 @@
 module Profile (
-  InstalledProfiles (..),
+  InstalledProfiles,
   addProfile,
   removeProfile,
+  getProfilePath,
+  profilePaths,
   ProfileProps (..),
   ProfileSpec (..),
   ProfileError (..),
@@ -46,6 +48,12 @@ addProfile ident path ips = ips{profiles = M.insert ident path ips.profiles}
 
 removeProfile :: ID -> InstalledProfiles -> InstalledProfiles
 removeProfile ident ips = ips{profiles = M.delete ident ips.profiles}
+
+getProfilePath :: ID -> InstalledProfiles -> Maybe FilePath
+getProfilePath ident ips = ips.profiles M.!? ident
+
+profilePaths :: InstalledProfiles -> [FilePath]
+profilePaths ips = M.elems ips.profiles
 
 data ProfileProps = ProfileProps
   { profileName :: !T.Text
