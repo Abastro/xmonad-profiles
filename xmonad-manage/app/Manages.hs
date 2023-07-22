@@ -2,9 +2,8 @@ module Manages (
   SavedData (..),
   savedVar,
   restore,
-  ManageSaved (..),
   ManageEnv (..),
-  loadConfig,
+  makeManageEnv
 )
 where
 
@@ -16,11 +15,9 @@ import Data.ByteString.Lazy qualified as B
 import Data.Proxy
 import Data.Serialize
 import Data.StateVar
-import GHC.Generics (Generic)
 import System.Directory
 import System.FilePath
 import System.IO
-import Text.Printf
 
 class (Serialize a) => SavedData a where
   dataName :: Proxy a -> FilePath
@@ -49,28 +46,20 @@ savedVar = makeStateVar load save
 restore :: forall a. (SavedData a) => Proxy a -> IO ()
 restore Proxy = initialize @a >>= (savedVar $=)
 
-newtype ManageSaved = ManageSaved {managePath :: FilePath}
-  deriving (Show, Generic)
-
-instance Serialize ManageSaved
-instance SavedData ManageSaved where
-  dataName :: Proxy ManageSaved -> FilePath
-  dataName Proxy = "manage-data"
-  initialize :: IO ManageSaved
-  initialize = do
-    putStrLn "Manager path not yet specified, setting to current directory"
-    managePath <- getCurrentDirectory
-    pure $ ManageSaved{managePath}
-
 data ManageEnv = ManageEnv
-  { envPath :: !FilePath
-  , home :: !FilePath
-  -- ^ Home directory for easier referencing
+  { home :: !FilePath
+  , configDir :: !FilePath
+  , databaseDir :: !FilePath
   }
 
--- TODO Remove envPath? Consider.
--- TODO Maybe do not retry loading config, and let installation handle the config?
+makeManageEnv :: IO ManageEnv
+makeManageEnv = do
+  home <- getHomeDirectory
+  let configDir = localDirectory FHSConfig </> "xmonad-manage"
+      databaseDir = localDirectory FHSShare </> "xmonad-manage"
+  pure ManageEnv{..}
 
+{-
 -- | Loads configuration from /config folder, and copies the template if it fails.
 loadConfig :: ManageEnv -> String -> (FilePath -> IO a) -> IO a
 loadConfig ManageEnv{..} cfgName reader =
@@ -85,3 +74,4 @@ loadConfig ManageEnv{..} cfgName reader =
   where
     templatePath = envPath </> "database" </> cfgName
     configPath = envPath </> "config" </> cfgName
+-}

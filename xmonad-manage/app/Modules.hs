@@ -82,16 +82,15 @@ instance FromYAML ActiveModules where
 
 -- TODO Merge with loadModule to produce `ModuleSet (Component ModuleMode)`
 loadActiveCfg :: ManageEnv -> IO (ModuleSet ModulePath)
-loadActiveCfg mEnv = loadConfig mEnv "active-modules.yaml" readCfg
+loadActiveCfg mEnv = do
+  ActiveModules{..} <- readYAMLFile userError (mEnv.configDir </> "active-modules.yaml")
+  verified <- M.traverseWithKey verifyType activeSet.typedModules
+  let adjusted = activeSet{typedModules = verified}
+  if requiredTypes `S.isSubsetOf` M.keysSet adjusted.typedModules
+    then pure adjusted
+    else fail "Required modules are absent." -- IDK, do I improve this error message?
+    -- ? How to: Parse, not validate?
   where
-    readCfg path = do
-      ActiveModules{..} <- readYAMLFile userError path
-      verified <- M.traverseWithKey verifyType activeSet.typedModules
-      let adjusted = activeSet{typedModules = verified}
-      if requiredTypes `S.isSubsetOf` M.keysSet adjusted.typedModules
-        then pure adjusted
-        else fail "Required modules are absent." -- IDK, do I improve this error message?
-        -- ? How to: Parse, not validate?
     verifyType typ modulePath = do
       ModuleSpec{..} <- readModuleSpec userError (canonPath mEnv modulePath)
       unless (moduleType == Just typ) $ do

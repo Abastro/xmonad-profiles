@@ -95,10 +95,8 @@ manageOpts =
 main :: IO ()
 main = (`catch` handleError) $ do
   hSetBuffering stdout LineBuffering -- For consistent line buffering
-  home <- getHomeDirectory
-
-  ManageSaved{managePath = envPath} <- get (savedVar @ManageSaved)
-  Opts.customExecParser optPrefs manageOpts >>= handleOption ManageEnv{..}
+  mEnv <- makeManageEnv
+  Opts.customExecParser optPrefs manageOpts >>= handleOption mEnv
   where
     handleError = \case
       ProfileNotFound profID -> do
@@ -118,7 +116,6 @@ handleOption mEnv@ManageEnv{home} = \case
   -- Resets the save if corrupted
   ResetSave -> do
     putStrLn "*** Resetting save, data could be lost! ***"
-    restore $ Proxy @ManageSaved
     restore $ Proxy @InstalledProfiles
     putStrLn "Save reset."
 

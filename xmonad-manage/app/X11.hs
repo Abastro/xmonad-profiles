@@ -24,6 +24,7 @@ data DisplayConfig = DisplayConfig
   }
   deriving (Show)
 
+-- TODO Override display configuration by local config directory
 instance FromYAML DisplayConfig where
   parseYAML :: Node Pos -> Parser DisplayConfig
   parseYAML = withMap "display-config" $ \m ->
@@ -34,7 +35,7 @@ instance FromYAML DisplayConfig where
       <*> (m .: "Cursor-Theme")
 
 loadDisplayCfg :: ManageEnv -> IO DisplayConfig
-loadDisplayCfg mEnv = loadConfig mEnv "display-config.yaml" (readYAMLFile userError)
+loadDisplayCfg mEnv = readYAMLFile userError (mEnv.configDir </> "display-config.yaml")
 
 data SettingsValue = SetFlag !Bool | SetInt !Int | SetText !T.Text
 
