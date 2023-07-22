@@ -167,7 +167,7 @@ getDirectories configDir spec mEnv = do
   -- Apparently the executable is a cache..
   cacheDir <- getXdgDirectory XdgCache (idStr spec.profileID)
   serviceDir <- getServiceDirectory PerUserService
-  pure MkDirectories{databaseDir = mEnv.databaseDir </> "database", ..}
+  pure MkDirectories{databaseDir = mEnv.databaseDir, ..}
 
 prepareProfileDirs :: Directories -> Context a -> IO ()
 prepareProfileDirs dirs = \case
