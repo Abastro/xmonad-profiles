@@ -30,8 +30,8 @@ else
 fi
 
 echo "Installing data files into $local_share/$app_id..."
-sudo cp -rT "database" "$local_share/$app_id/database"
-sudo cp -rT "modules" "$local_share/$app_id/modules"
+sudo cp -rT --no-preserve=mode "database" "$local_share/$app_id/database"
+sudo cp -rT --no-preserve=mode "modules" "$local_share/$app_id/modules"
 
 # Removing existing xmonad-manage in /opt/bin
 if [ -e "/opt/bin/xmonad-manage" ]; then
