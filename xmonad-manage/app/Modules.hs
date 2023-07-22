@@ -98,10 +98,10 @@ loadActiveCfg mEnv = do
         fail "Wrong module for the type."
       pure modulePath
 
--- ? Perhaps impleemnt overriding by user directory?
+-- ? Perhaps implement overriding by user directory?
 canonPath :: ManageEnv -> ModulePath -> FilePath
-canonPath _ = \case
-  BuiltIn ident -> localDirectory FHSConfig </> "modules" </> ident
+canonPath mEnv = \case
+  BuiltIn ident -> mEnv.moduleDir </> ident
   External path -> path
 
 -- | Loads and gives the (list of) specified active modules.

@@ -49,6 +49,7 @@ restore Proxy = initialize @a >>= (savedVar $=)
 data ManageEnv = ManageEnv
   { home :: !FilePath
   , configDir :: !FilePath
+  , moduleDir :: !FilePath
   , databaseDir :: !FilePath
   }
 
@@ -56,22 +57,6 @@ makeManageEnv :: IO ManageEnv
 makeManageEnv = do
   home <- getHomeDirectory
   let configDir = localDirectory FHSConfig </> "xmonad-manage"
-      databaseDir = localDirectory FHSShare </> "xmonad-manage"
+      moduleDir = localDirectory FHSShare </> "xmonad-manage" </> "module"
+      databaseDir = localDirectory FHSShare </> "xmonad-manage" </> "database"
   pure ManageEnv{..}
-
-{-
--- | Loads configuration from /config folder, and copies the template if it fails.
-loadConfig :: ManageEnv -> String -> (FilePath -> IO a) -> IO a
-loadConfig ManageEnv{..} cfgName reader =
-  catch (reader configPath) $ \(exc :: IOException) -> do
-    printf "Cannot identify the configuration %s due to:\n" cfgName
-    hPrint stderr exc
-    printf "Reverting configuration to default.\n"
-    createDirectoryIfMissing True (envPath </> "config")
-    copyFile templatePath configPath
-    printf "Trying again...\n"
-    reader configPath
-  where
-    templatePath = envPath </> "database" </> cfgName
-    configPath = envPath </> "config" </> cfgName
--}

@@ -42,6 +42,7 @@ import X11
 
 -- TODO Give choice for profile to keep separate directory for cabal installations. (CABAL_DIR)
 -- TODO Further adopt XDG Directory
+-- TODO Think about Bin directory
 
 data Action
   = ResetSave
