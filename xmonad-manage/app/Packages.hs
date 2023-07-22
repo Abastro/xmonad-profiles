@@ -140,8 +140,8 @@ findDistro = do
     Just distro -> pure (ManageIDOf . T.strip $ T.pack distro)
 
 getDatabase :: ManageEnv -> IO SystemPackages
-getDatabase ManageEnv{..} = do
-  readYAMLFile DatabaseMalformed (envPath </> "database" </> "system-packages.yaml")
+getDatabase mEnv = do
+  readYAMLFile DatabaseMalformed (mEnv.databaseDir </> "system-packages.yaml")
 
 -- ?? How did I write this ??
 installPackages :: ManageEnv -> PackageData -> InstallCond -> [Package] -> IO ()
