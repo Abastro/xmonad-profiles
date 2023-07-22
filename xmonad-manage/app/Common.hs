@@ -59,6 +59,7 @@ localDirectory fhsDir = "/usr/local" </> fhsPath fhsDir
 setToExecutable :: FilePath -> IO ()
 setToExecutable path = do
   perm <- getPermissions path
+  -- This sets executable permission for others as well.
   setPermissions path (setOwnerExecutable True perm)
 
 withTemporaryDirectory :: (FilePath -> IO ()) -> IO ()
