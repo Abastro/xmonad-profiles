@@ -91,15 +91,14 @@ loadActiveCfg mEnv = do
     then pure adjusted
     else fail "Required modules are absent." -- IDK, do I improve this error message?
     -- ? How to: Parse, not validate?
- where
-  verifyType typ modulePath = do
-    ModuleSpec{..} <- readModuleSpec userError (canonPath mEnv modulePath)
-    unless (moduleType == Just typ) $ do
-      hPrintf stderr "Module %s is specified for type %s, yet it has type %s.\n" name (show typ) (show moduleType)
-      fail "Wrong module for the type."
-    pure modulePath
+  where
+    verifyType typ modulePath = do
+      ModuleSpec{..} <- readModuleSpec userError (canonPath mEnv modulePath)
+      unless (moduleType == Just typ) $ do
+        hPrintf stderr "Module %s is specified for type %s, yet it has type %s.\n" name (show typ) (show moduleType)
+        fail "Wrong module for the type."
+      pure modulePath
 
--- ? Perhaps implement overriding by user directory?
 canonPath :: ManageEnv -> ModulePath -> FilePath
 canonPath mEnv = \case
   BuiltIn ident -> mEnv.moduleDir </> ident
@@ -114,37 +113,37 @@ combineWithBuiltins :: Component ModuleMode -> ModuleSet (Component ModuleMode) 
 combineWithBuiltins x11Module moduleSet =
   withIdentifier (UnsafeMakeID "combined") . withModuleDirOwned $
     x11Module <> fold moduleSet
- where
-  -- This needs actual bracket.
-  withModuleDirOwned component =
-    component
-      { handle = \(mEnv :: ManageEnv) -> \case
-          mode@(Custom Install) -> do
-            -- Only own the module dir on installation.
-            bracket (ownModuleDir mEnv) (returnModuleDir mEnv) $
-              \_ -> component.handle mEnv mode
-          mode -> component.handle mEnv mode
-      }
+  where
+    -- This needs actual bracket.
+    withModuleDirOwned component =
+      component
+        { handle = \(mEnv :: ManageEnv) -> \case
+            mode@(Custom Install) -> do
+              -- Only own the module dir on installation.
+              bracket (ownModuleDir mEnv) (returnModuleDir mEnv) $ \_ ->
+                component.handle mEnv mode
+            mode -> component.handle mEnv mode
+        }
 
-  ownModuleDir mEnv = do
-    userID <- getEffectiveUserID
-    ownerID <- fileOwner <$> getFileStatus mEnv.moduleDir
-    if userID == ownerID
-      then pure Nothing
-      else do
-        userEntry <- getUserEntryForID userID
-        printf "To set up modules, %s need to be modified.\n" mEnv.moduleDir
-        printf "In the setup process, %s will be temporarily owned by %s.\n" mEnv.moduleDir userEntry.userName
-        printf "Asking for sudo permission for this operation...\n"
-        callProcess "sudo" ["chown", "-R", show userID, mEnv.moduleDir]
-        pure (Just ownerID)
+    ownModuleDir mEnv = do
+      userID <- getEffectiveUserID
+      ownerID <- fileOwner <$> getFileStatus mEnv.moduleDir
+      if userID == ownerID
+        then pure Nothing
+        else do
+          userEntry <- getUserEntryForID userID
+          printf "To set up modules, %s need to be modified.\n" mEnv.moduleDir
+          printf "In the setup process, %s will be temporarily owned by %s.\n" mEnv.moduleDir userEntry.userName
+          printf "Asking for sudo permission for this operation...\n"
+          callProcess "sudo" ["chown", "-R", show userID, mEnv.moduleDir]
+          pure (Just ownerID)
 
-  returnModuleDir mEnv = \case
-    Nothing -> pure ()
-    Just origOwnerID -> do
-      origOnwerEntry <- getUserEntryForID origOwnerID
-      printf "Returning ownership to the original owner %s...\n" origOnwerEntry.userName
-      callProcess "sudo" ["chown", "-R", show origOwnerID, mEnv.moduleDir]
+    returnModuleDir mEnv = \case
+      Nothing -> pure ()
+      Just origOwnerID -> do
+        origOnwerEntry <- getUserEntryForID origOwnerID
+        printf "Returning ownership to the original owner %s...\n" origOnwerEntry.userName
+        callProcess "sudo" ["chown", "-R", show origOwnerID, mEnv.moduleDir]
 
 data ModuleSpec = ModuleSpec
   { moduleType :: !(Maybe ModuleType)
@@ -186,16 +185,15 @@ moduleForSpec moduleDir spec =
     mconcat
       [ ofDependencies spec.dependencies
       , ofHandle (setupEnvironment spec)
-      , -- ! This does not work since is in protected domain.
-        scripts >>> traversing_ (ofHandle $ executeScript spec)
+      , scripts >>> traversing_ (ofHandle $ executeScript spec)
       ]
- where
-  scripts = executableScripts $ \case
-    Custom Install -> scriptFor <$> spec.install
-    Custom Remove -> Nothing
-    InvokeOn Start -> Just (scriptFor spec.run)
+  where
+    scripts = executableScripts $ \case
+      Custom Install -> scriptFor <$> spec.install
+      Custom Remove -> Nothing
+      InvokeOn Start -> Just (scriptFor spec.run)
 
-  scriptFor path = moduleDir </> path
+    scriptFor path = moduleDir </> path
 
 executeScript :: ModuleSpec -> FilePath -> Context ModuleMode -> IO ()
 executeScript spec script = \case
@@ -217,6 +215,6 @@ setupEnvironment spec _ = \case
   InvokeOn Start -> do
     printf "[%s] Setting up...\n" spec.name
     forInEnv setServiceEnv
- where
-  forInEnv act = for_ (M.toList spec.environment) $ \(key, str) -> do
-    act (T.unpack key) =<< shellExpand str
+  where
+    forInEnv act = for_ (M.toList spec.environment) $ \(key, str) -> do
+      act (T.unpack key) =<< shellExpand str
