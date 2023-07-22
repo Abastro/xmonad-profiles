@@ -57,6 +57,6 @@ makeManageEnv :: IO ManageEnv
 makeManageEnv = do
   home <- getHomeDirectory
   let configDir = localDirectory FHSConfig </> "xmonad-manage"
-      moduleDir = localDirectory FHSShare </> "xmonad-manage" </> "module"
+      moduleDir = localDirectory FHSShare </> "xmonad-manage" </> "modules"
       databaseDir = localDirectory FHSShare </> "xmonad-manage" </> "database"
   pure ManageEnv{..}

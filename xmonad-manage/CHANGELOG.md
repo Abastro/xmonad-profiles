@@ -1,5 +1,15 @@
 # Changelog
 ## master (0.8.0)
+- **! Required to run both `xmonad-manage setup` and re-installing your profile !**
+- **Changed the install directory to `/usr/local`.**
+  - `xmonad-manage` executable is copied into `/usr/local/bin`.
+  - Configurations are copied into `/usr/local/etc`.
+  - Data files are copied into `/usr/local/share`.
+- Now follows XDG Directory standard.
+  - `xmonad-manage` logs are stored in `~/.local/state/xmonad-manage`.
+  - `xmonad-manage` saves has been stored in `~/.local/share/xmonad-manage`.
+  - Respective profile is 
+
 ## 0.7.3
 - Removed update command, please use `./install.sh` instead.
 - Install command can reinstall as well; Simply specify ID in place of the path.
