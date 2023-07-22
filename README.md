@@ -55,5 +55,8 @@ If you don't mind nuking the haskell stores, you can remove the `xmonad-profiles
 
 You might also want to clean up `${XDG_DATA_DIR}/xmonad-manage`, which contains small data files.
 
+NB: Starting in version 0.8.0.0, `xmonad-manage` is installed in `/usr/local/` directory.
+Search for `xmonad-manage` there to see which directories it was installed to.
+
 NB: Individual profiles could be removed,
 but the system dependencies are not deleted since you may have other packages dependent to it.

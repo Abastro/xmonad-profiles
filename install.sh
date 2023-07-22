@@ -33,6 +33,11 @@ echo "Installing data files into $local_share/$app_id..."
 sudo cp -r "database" "$local_share/$app_id"
 sudo cp -r "modules" "$local_share/$app_id"
 
+# Removing existing xmonad-manage in /opt/bin
+if [ -e "/opt/bin/xmonad-manage" ]; then
+  sudo rm "/opt/bin/xmonad-manage"
+fi
+
 # Checkup run
 xmonad-manage --help
 echo "Done."

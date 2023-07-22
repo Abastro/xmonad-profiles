@@ -5,10 +5,11 @@
   - `xmonad-manage` executable is copied into `/usr/local/bin`.
   - Configurations are copied into `/usr/local/etc`.
   - Data files are copied into `/usr/local/share`.
-- Now follows XDG Directory standard.
+- Now `xmonad-manage` follows XDG Directory standard.
   - `xmonad-manage` logs are stored in `~/.local/state/xmonad-manage`.
   - `xmonad-manage` saves has been stored in `~/.local/share/xmonad-manage`.
-  - Respective profile is 
+  - Respective profile data is stored in `~/.local/share/`, while cache is stored in `~/.cache`.
+    Note that the cache contains the built executables from the profile.
 
 ## 0.7.3
 - Removed update command, please use `./install.sh` instead.
