@@ -33,6 +33,7 @@ executable xmonad-manage
       base ^>=4.17.1.0
     , filepath
     , directory
+    , unix
     , containers ==0.6.*
     , mtl >=2.2 && <2.4
     , bytestring ==0.11.*

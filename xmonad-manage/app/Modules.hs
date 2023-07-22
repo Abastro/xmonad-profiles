@@ -25,6 +25,7 @@ import Manages
 import Packages
 import System.FilePath
 import System.IO
+import System.Posix hiding (Start)
 import System.Process
 import Text.Printf
 
@@ -111,8 +112,35 @@ specifiedActiveModules mEnv = traverse (loadModule . canonPath mEnv)
 -- | Takes X11 module as a parameter, and combines it with rest of modules.
 combineWithBuiltins :: Component ModuleMode -> ModuleSet (Component ModuleMode) -> Component ModuleMode
 combineWithBuiltins x11Module moduleSet =
-  withIdentifier (UnsafeMakeID "combined") $
+  withIdentifier (UnsafeMakeID "combined") . withModuleDirOwned $
     x11Module <> fold moduleSet
+  where
+    -- This needs actual bracket.
+    withModuleDirOwned component =
+      component
+        { handle = \(mEnv :: ManageEnv) mode ->
+            bracket (ownModuleDir mEnv) (returnModuleDir mEnv) $ \_ -> component.handle mEnv mode
+        }
+
+    ownModuleDir mEnv = do
+      userID <- getEffectiveUserID
+      ownerID <- fileOwner <$> getFileStatus mEnv.moduleDir
+      if userID == ownerID
+        then pure Nothing
+        else do
+          userEntry <- getUserEntryForID userID
+          printf "To set up modules, %s need to be modified.\n" mEnv.moduleDir
+          printf "In the setup process, %s will be temporarily owned by %s.\n" mEnv.moduleDir userEntry.userName
+          printf "Asking for sudo permission for this operation...\n"
+          callProcess "sudo" ["chown", "-R", show userID, mEnv.moduleDir]
+          pure (Just ownerID)
+
+    returnModuleDir mEnv = \case
+      Nothing -> pure ()
+      Just origOwnerID -> do
+        origOnwerEntry <- getUserEntryForID origOwnerID
+        printf "Returning ownership to the original owner %s...\n" origOnwerEntry.userName
+        callProcess "sudo" ["chown", "-R", show origOwnerID, mEnv.moduleDir]
 
 data ModuleSpec = ModuleSpec
   { moduleType :: !(Maybe ModuleType)
@@ -154,7 +182,8 @@ moduleForSpec moduleDir spec =
     mconcat
       [ ofDependencies spec.dependencies
       , ofHandle (setupEnvironment spec)
-      , scripts >>> traversing_ (ofHandle $ executeScript spec)
+      , -- ! This does not work since is in protected domain.
+        scripts >>> traversing_ (ofHandle $ executeScript spec)
       ]
   where
     scripts = executableScripts $ \case
