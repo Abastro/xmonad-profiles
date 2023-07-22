@@ -39,6 +39,7 @@ import Data.YAML
 import System.Directory
 import System.Environment
 import System.FilePath
+import System.Posix hiding (getEnv, setEnv)
 import System.Process
 import Text.Parsec qualified as P
 import Text.Printf
@@ -58,9 +59,10 @@ localDirectory fhsDir = "/usr/local" </> fhsPath fhsDir
 
 setToExecutable :: FilePath -> IO ()
 setToExecutable path = do
-  perm <- getPermissions path
-  -- This sets executable permission for others as well.
-  setPermissions path (setOwnerExecutable True perm)
+  -- Generic one is not reliable, setting executable permission for all users.
+  mode <- fileMode <$> getFileStatus path
+  let newMode = foldr unionFileModes mode [ownerExecuteMode, groupExecuteMode, otherExecuteMode]
+  setFileMode path newMode
 
 withTemporaryDirectory :: (FilePath -> IO ()) -> IO ()
 withTemporaryDirectory = bracket makeTempDir removePathForcibly
