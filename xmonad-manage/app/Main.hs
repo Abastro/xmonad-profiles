@@ -30,15 +30,17 @@ import X11
 
 -- * Fetches from separate configuration directory for each profile.
 
--- ? Long-term: Add proxy for package removal.
-
 -- ? Consider: do not install system packages, and instead check for existence of packages?
+-- ? Long-term: Add proxy for package removal.
 
 -- ? Stay up-to-date appropriately corresponding to GHC Updates - How?
 -- If this were statically compiled, it would not matter, but it will take more size.
 
--- TODO Keep separate directory for cabal installations. (CABAL_DIR)
--- TODO Also needs to install data files into designated data portions.
+-- * Profiles are kept for individual users,
+-- * while data files and config files are shared in /usr/local.
+-- * Overriding by local directories would be available later.
+
+-- TODO Give choice for profile to keep separate directory for cabal installations. (CABAL_DIR)
 -- TODO Further adopt XDG Directory
 
 data Action
@@ -112,7 +114,7 @@ main = (`catch` handleError) $ do
         exitWith (ExitFailure 3)
 
 handleOption :: ManageEnv -> Action -> IO ()
-handleOption mEnv@ManageEnv{..} = \case
+handleOption mEnv@ManageEnv{home} = \case
   -- Resets the save if corrupted
   ResetSave -> do
     putStrLn "*** Resetting save, data could be lost! ***"
@@ -199,7 +201,6 @@ handleOption mEnv@ManageEnv{..} = \case
               ":"
               [ home </> ".cabal" </> "bin"
               , home </> ".ghcup" </> "bin"
-              , thisInstallDirectory
               , path
               ]
       printf "Updating path to \"%s\"...\n" newPath

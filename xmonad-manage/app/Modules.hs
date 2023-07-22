@@ -99,9 +99,10 @@ loadActiveCfg mEnv = loadConfig mEnv "active-modules.yaml" readCfg
         fail "Wrong module for the type."
       pure modulePath
 
+-- ? Perhaps impleemnt overriding by user directory?
 canonPath :: ManageEnv -> ModulePath -> FilePath
-canonPath mEnv = \case
-  BuiltIn ident -> mEnv.envPath </> "modules" </> ident
+canonPath _ = \case
+  BuiltIn ident -> localDirectory FHSConfig </> "modules" </> ident
   External path -> path
 
 -- | Loads and gives the (list of) specified active modules.
@@ -110,7 +111,9 @@ specifiedActiveModules mEnv = traverse (loadModule . canonPath mEnv)
 
 -- | Takes X11 module as a parameter, and combines it with rest of modules.
 combineWithBuiltins :: Component ModuleMode -> ModuleSet (Component ModuleMode) -> Component ModuleMode
-combineWithBuiltins x11Module moduleSet = withIdentifier (UnsafeMakeID "combined") $ x11Module <> fold moduleSet
+combineWithBuiltins x11Module moduleSet =
+  withIdentifier (UnsafeMakeID "combined") $
+    x11Module <> fold moduleSet
 
 data ModuleSpec = ModuleSpec
   { moduleType :: !(Maybe ModuleType)

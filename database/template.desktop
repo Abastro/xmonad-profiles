@@ -2,4 +2,4 @@
 Type=XSession
 Name=${PROFILE_NAME}
 Comment=${PROFILE_DETAILS}
-Exec=/opt/bin/xmonad-manage run ${PROFILE_ID}
+Exec=xmonad-manage run ${PROFILE_ID}

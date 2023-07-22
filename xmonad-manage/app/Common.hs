@@ -4,7 +4,8 @@
 module Common (
   module Prelude,
   module Control.Category,
-  thisInstallDirectory,
+  FHSDirectory (..),
+  localDirectory,
   setToExecutable,
   withTemporaryDirectory,
   ID (UnsafeMakeID),
@@ -43,8 +44,17 @@ import Text.Parsec qualified as P
 import Text.Printf
 import Prelude hiding (id, (.))
 
-thisInstallDirectory :: FilePath
-thisInstallDirectory = "/opt" </> "bin"
+data FHSDirectory = FHSBin | FHSLib | FHSConfig | FHSShare
+fhsPath :: FHSDirectory -> FilePath
+fhsPath = \case
+  FHSBin -> "bin"
+  FHSLib -> "lib"
+  FHSConfig -> "etc"
+  FHSShare -> "share"
+
+-- | This directory is visible to all users; it is "local" in the sense that software is locally installed.
+localDirectory :: FHSDirectory -> FilePath
+localDirectory fhsDir = "/usr/local" </> fhsPath fhsDir
 
 setToExecutable :: FilePath -> IO ()
 setToExecutable path = do

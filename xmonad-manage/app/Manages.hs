@@ -68,6 +68,9 @@ data ManageEnv = ManageEnv
   -- ^ Home directory for easier referencing
   }
 
+-- TODO Remove envPath? Consider.
+-- TODO Maybe do not retry loading config, and let installation handle the config?
+
 -- | Loads configuration from /config folder, and copies the template if it fails.
 loadConfig :: ManageEnv -> String -> (FilePath -> IO a) -> IO a
 loadConfig ManageEnv{..} cfgName reader =
