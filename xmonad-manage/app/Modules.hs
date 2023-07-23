@@ -21,6 +21,7 @@ import Data.YAML
 import GHC.Generics
 import Manages
 import Packages
+import References
 import System.FilePath
 import System.Posix hiding (Start)
 import System.Process
@@ -93,39 +94,31 @@ canonPath mEnv = \case
 -- | Takes X11 module as a parameter, and combines it with rest of modules.
 combineWithBuiltins :: Component ModuleMode -> ModuleSet (Component ModuleMode) -> Component ModuleMode
 combineWithBuiltins x11Module moduleSet =
-  withIdentifier (UnsafeMakeID "combined") . withModuleDirOwned $
+  withIdentifier (UnsafeMakeID "combined") . withHandleWrap owning $
     x11Module <> fold moduleSet
   where
-    -- This needs actual bracket.
-    withModuleDirOwned component =
-      component
-        { handle = \(mEnv :: ManageEnv) -> \case
-            mode@(Custom Install) -> do
-              -- Only own the module dir on installation.
-              bracket (ownModuleDir mEnv) (returnModuleDir mEnv) $ \_ ->
-                component.handle mEnv mode
-            mode -> component.handle mEnv mode
-        }
+    owning innerHandle mEnv mode = case mode of
+      InvokeOn _ -> innerHandle mEnv mode
+      Custom _ -> do
+        -- Only own the module dir on installation/removal.
+        userID <- getEffectiveUserID
+        ownerID <- fileOwner <$> getFileStatus mEnv.moduleDir
+        if userID == ownerID
+          then innerHandle mEnv mode
+          else do
+            -- This needs actual bracket.
+            bracket_ (ownModuleDir mEnv userID) (disownModuleDir mEnv ownerID) $
+              innerHandle mEnv mode
 
-    ownModuleDir mEnv = do
-      userID <- getEffectiveUserID
-      ownerID <- fileOwner <$> getFileStatus mEnv.moduleDir
-      if userID == ownerID
-        then pure Nothing
-        else do
-          userEntry <- getUserEntryForID userID
-          printf "To set up modules, %s need to be modified.\n" mEnv.moduleDir
-          printf "In the setup process, %s will be temporarily owned by %s.\n" mEnv.moduleDir userEntry.userName
-          printf "Asking for sudo permission for this operation...\n"
-          callProcess "sudo" ["chown", "-R", show userID, mEnv.moduleDir]
-          pure (Just ownerID)
+    ownModuleDir mEnv userID = do
+      userEntry <- getUserEntryForID userID
+      combinedLog $ OwnModuleDir mEnv.moduleDir userEntry.userName
+      callProcess "sudo" ["chown", "-R", show userID, mEnv.moduleDir]
 
-    returnModuleDir mEnv = \case
-      Nothing -> pure ()
-      Just origOwnerID -> do
-        origOnwerEntry <- getUserEntryForID origOwnerID
-        printf "Returning ownership to the original owner %s...\n" origOnwerEntry.userName
-        callProcess "sudo" ["chown", "-R", show origOwnerID, mEnv.moduleDir]
+    disownModuleDir mEnv origOwnerID = do
+      origOwnerEntry <- getUserEntryForID origOwnerID
+      combinedLog $ DisownModuleDir mEnv.moduleDir origOwnerEntry.userName
+      callProcess "sudo" ["chown", "-R", show origOwnerID, mEnv.moduleDir]
 
 data ModuleSpec = ModuleSpec
   { moduleType :: !(Maybe ModuleType)
@@ -209,7 +202,7 @@ setupEnvironment :: ModuleSpec -> ManageEnv -> Context ModuleMode -> IO ()
 setupEnvironment spec _ = \case
   Custom Install -> do
     printf "[%s] Checking shell expansions...\n" spec.name
-    forInEnv (printf "[Env] %s=%s\n")
+    forInEnv (printf "%s=%s\n")
   Custom Remove -> pure ()
   InvokeOn Start -> do
     printf "[%s] Setting up...\n" spec.name

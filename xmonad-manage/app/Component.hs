@@ -7,6 +7,7 @@ module Component (
   traversing_,
   asks,
   withIdentifier,
+  withHandleWrap,
   ofHandle,
   ofAction,
   ofDependencies,
@@ -102,6 +103,12 @@ asks f =
 withIdentifier :: ID -> ComponentCat mode env a -> ComponentCat mode env a
 withIdentifier identifier component = component{identifier}
 
+withHandleWrap ::
+  ((env -> Context mode -> IO a) -> (env' -> Context mode -> IO a')) ->
+  ComponentCat mode env a ->
+  ComponentCat mode env' a'
+withHandleWrap tr component = component{handle = tr component.handle}
+
 ofHandle :: (env -> Context mode -> IO a) -> ComponentCat mode env a
 ofHandle handle = MkComponent{dependencies = [], identifier = UnsafeMakeID "handler", handle}
 
@@ -126,7 +133,7 @@ remove env MkComponent{..} = do
   printf "Running custom removal process...\n"
   handle env (Custom Remove)
 
-invoke :: Show mode => env -> mode -> ComponentCat mode env () -> IO ()
+invoke :: (Show mode) => env -> mode -> ComponentCat mode env () -> IO ()
 invoke env mode MkComponent{..} = do
   printf "Invoked component in mode %s.\n" (show mode)
   handle env (InvokeOn mode)

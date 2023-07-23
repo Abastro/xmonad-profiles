@@ -16,6 +16,7 @@ executable xmonad-manage
   main-is:          Main.hs
   other-modules:
     Common
+    References
     Manages
     Packages
     Component
