@@ -37,7 +37,9 @@ import X11
 -- If this were statically compiled, it would not matter, but it will take more size.
 
 -- * Profiles are kept for individual users,
+
 -- * while data files and config files are shared in /usr/local.
+
 -- * Overriding by local directories would be available later.
 
 -- TODO Give choice for profile to keep separate directory for cabal installations. (CABAL_DIR)

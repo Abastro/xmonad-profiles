@@ -1,15 +1,15 @@
 -- | References for states and logs.
-module References
-  ( PrePost (..),
-    ProfileMode (..),
-    ProfileLog (..),
-    profileLog,
-    ModuleCombinedLog (..),
-    combinedLog,
-    ModuleMode (..),
-    ModuleLog (..),
-    moduleLog,
-  )
+module References (
+  PrePost (..),
+  ProfileMode (..),
+  ProfileLog (..),
+  profileLog,
+  ModuleCombinedLog (..),
+  combinedLog,
+  ModuleMode (..),
+  ModuleLog (..),
+  moduleLog,
+)
 where
 
 import Common

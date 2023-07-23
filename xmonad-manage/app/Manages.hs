@@ -3,7 +3,7 @@ module Manages (
   savedVar,
   restore,
   ManageEnv (..),
-  makeManageEnv
+  makeManageEnv,
 )
 where
 

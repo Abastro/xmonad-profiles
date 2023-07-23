@@ -1,15 +1,15 @@
-module Profile
-  ( InstalledProfiles,
-    addProfile,
-    removeProfile,
-    getProfilePath,
-    profilePaths,
-    ProfileSpec (..),
-    ProfileError (..),
-    ProfileMode (..),
-    readProfileSpec,
-    loadProfile,
-  )
+module Profile (
+  InstalledProfiles,
+  addProfile,
+  removeProfile,
+  getProfilePath,
+  profilePaths,
+  ProfileSpec (..),
+  ProfileError (..),
+  ProfileMode (..),
+  readProfileSpec,
+  loadProfile,
+)
 where
 
 import Common
@@ -46,10 +46,10 @@ instance SavedData InstalledProfiles where
   initialize = pure $ InstalledProfiles M.empty
 
 addProfile :: ID -> FilePath -> InstalledProfiles -> InstalledProfiles
-addProfile ident path ips = ips {profiles = M.insert ident path ips.profiles}
+addProfile ident path ips = ips{profiles = M.insert ident path ips.profiles}
 
 removeProfile :: ID -> InstalledProfiles -> InstalledProfiles
-removeProfile ident ips = ips {profiles = M.delete ident ips.profiles}
+removeProfile ident ips = ips{profiles = M.delete ident ips.profiles}
 
 getProfilePath :: ID -> InstalledProfiles -> Maybe FilePath
 getProfilePath ident ips = ips.profiles M.!? ident
@@ -58,13 +58,13 @@ profilePaths :: InstalledProfiles -> [FilePath]
 profilePaths ips = M.elems ips.profiles
 
 data ProfileSpec = ProfileSpec
-  { profileID :: !ID,
-    profileName :: !T.Text,
-    profileDetails :: !T.Text,
-    installScript :: !(Maybe FilePath),
-    buildScript, runService :: !FilePath,
-    otherServices :: [FilePath],
-    dependencies :: [Package]
+  { profileID :: !ID
+  , profileName :: !T.Text
+  , profileDetails :: !T.Text
+  , installScript :: !(Maybe FilePath)
+  , buildScript, runService :: !FilePath
+  , otherServices :: [FilePath]
+  , dependencies :: [Package]
   }
   deriving (Show)
 
@@ -110,16 +110,16 @@ profileForSpec configDir spec = profile
     profile =
       withIdentifier spec.profileID $
         mconcat
-          [ ofDependencies spec.dependencies,
-            ofAction (getDirectories configDir spec)
+          [ ofDependencies spec.dependencies
+          , ofAction (getDirectories configDir spec)
               >>> mconcat
-                [ ofHandle prepareProfileDirs,
-                  ofHandle (prepareSession spec),
-                  ofHandle setupEnvironment,
-                  serviceModule spec
-                ],
-            scripts >>> traversing_ (ofHandle $ executeScript spec.profileName),
-            buildOnInstall
+                [ ofHandle prepareProfileDirs
+                , ofHandle (prepareSession spec)
+                , ofHandle setupEnvironment
+                , serviceModule spec
+                ]
+          , scripts >>> traversing_ (ofHandle $ executeScript spec.profileName)
+          , buildOnInstall
           ]
     scripts = executableScripts $ \case
       Custom Install -> cfgFor <$> spec.installScript
@@ -153,10 +153,10 @@ executeScript name script = \case
 environments :: Directories -> M.Map String T.Text
 environments dirs =
   M.fromList
-    [ ("XMONAD_NAME", T.pack $ "xmonad-" <> arch <> "-" <> os),
-      ("XMONAD_DATA_DIR", T.pack dirs.dataDir),
-      ("XMONAD_CONFIG_DIR", T.pack dirs.configDir),
-      ("XMONAD_CACHE_DIR", T.pack dirs.cacheDir)
+    [ ("XMONAD_NAME", T.pack $ "xmonad-" <> arch <> "-" <> os)
+    , ("XMONAD_DATA_DIR", T.pack dirs.dataDir)
+    , ("XMONAD_CONFIG_DIR", T.pack dirs.configDir)
+    , ("XMONAD_CACHE_DIR", T.pack dirs.cacheDir)
     ]
 
 getDirectories :: FilePath -> ProfileSpec -> ManageEnv -> IO Directories
@@ -165,7 +165,7 @@ getDirectories configDir spec mEnv = do
   -- Apparently the executable should be in a cache..
   cacheDir <- getXdgDirectory XdgCache (idStr spec.profileID)
   serviceDir <- getServiceDirectory PerUserService
-  pure MkDirectories {databaseDir = mEnv.databaseDir, ..}
+  pure MkDirectories{databaseDir = mEnv.databaseDir, ..}
 
 prepareProfileDirs :: Directories -> Context a -> IO ()
 prepareProfileDirs dirs = \case
@@ -205,9 +205,9 @@ prepareSession ProfileSpec{..} dirs = \case
     onEnvNotFound key = fail $ printf "Profile variable %s not found" key
     profileEnv =
       M.fromList
-        [ ("PROFILE_ID", T.pack $ idStr profileID),
-          ("PROFILE_NAME", profileName),
-          ("PROFILE_DETAILS", profileDetails)
+        [ ("PROFILE_ID", T.pack $ idStr profileID)
+        , ("PROFILE_NAME", profileName)
+        , ("PROFILE_DETAILS", profileDetails)
         ]
 
 serviceNameOf :: FilePath -> String
