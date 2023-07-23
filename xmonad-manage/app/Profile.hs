@@ -1,16 +1,17 @@
-module Profile (
-  InstalledProfiles,
-  addProfile,
-  removeProfile,
-  getProfilePath,
-  profilePaths,
-  ProfileProps (..),
-  ProfileSpec (..),
-  ProfileError (..),
-  ProfileMode (..),
-  readProfileSpec,
-  loadProfile,
-) where
+module Profile
+  ( InstalledProfiles,
+    addProfile,
+    removeProfile,
+    getProfilePath,
+    profilePaths,
+    ProfileProps (..),
+    ProfileSpec (..),
+    ProfileError (..),
+    ProfileMode (..),
+    readProfileSpec,
+    loadProfile,
+  )
+where
 
 import Common
 import Component
@@ -25,6 +26,7 @@ import Data.YAML
 import GHC.Generics
 import Manages
 import Packages
+import References
 import System.Directory
 import System.FilePath
 import System.Info (arch, os)
@@ -37,6 +39,7 @@ newtype InstalledProfiles = InstalledProfiles
   deriving (Show, Generic)
 
 instance Serialize InstalledProfiles
+
 instance SavedData InstalledProfiles where
   dataName :: Proxy InstalledProfiles -> FilePath
   dataName Proxy = "installed-profiles"
@@ -44,10 +47,10 @@ instance SavedData InstalledProfiles where
   initialize = pure $ InstalledProfiles M.empty
 
 addProfile :: ID -> FilePath -> InstalledProfiles -> InstalledProfiles
-addProfile ident path ips = ips{profiles = M.insert ident path ips.profiles}
+addProfile ident path ips = ips {profiles = M.insert ident path ips.profiles}
 
 removeProfile :: ID -> InstalledProfiles -> InstalledProfiles
-removeProfile ident ips = ips{profiles = M.delete ident ips.profiles}
+removeProfile ident ips = ips {profiles = M.delete ident ips.profiles}
 
 getProfilePath :: ID -> InstalledProfiles -> Maybe FilePath
 getProfilePath ident ips = ips.profiles M.!? ident
@@ -56,18 +59,18 @@ profilePaths :: InstalledProfiles -> [FilePath]
 profilePaths ips = M.elems ips.profiles
 
 data ProfileProps = ProfileProps
-  { profileName :: !T.Text
-  , profileDetails :: !T.Text
+  { profileName :: !T.Text,
+    profileDetails :: !T.Text
   }
   deriving (Show)
 
 data ProfileSpec = ProfileSpec
-  { profileID :: !ID
-  , profileProps :: !ProfileProps
-  , installScript :: !(Maybe FilePath)
-  , buildScript, runService :: !FilePath
-  , otherServices :: [FilePath]
-  , dependencies :: [Package]
+  { profileID :: !ID,
+    profileProps :: !ProfileProps,
+    installScript :: !(Maybe FilePath),
+    buildScript, runService :: !FilePath,
+    otherServices :: [FilePath],
+    dependencies :: [Package]
   }
   deriving (Show)
 
@@ -89,15 +92,13 @@ data ProfileError
     ProfileIOError FilePath IOError
   | ProfileWrongFormat String
   deriving (Show)
+
 instance Exception ProfileError
 
 readProfileSpec :: FilePath -> IO ProfileSpec
 readProfileSpec cfgDir = wrapIOError $ readYAMLFile ProfileWrongFormat (cfgDir </> "profile.yaml")
   where
     wrapIOError = handle @IOError (throwIO . ProfileIOError cfgDir)
-
-data ProfileMode = BuildMode | RunMode
-  deriving (Show, Eq, Enum, Bounded)
 
 data Directories = MkDirectories
   { configDir, dataDir, cacheDir, serviceDir, databaseDir :: !FilePath
@@ -114,16 +115,16 @@ profileForSpec configDir spec = profile
     profile =
       withIdentifier spec.profileID $
         mconcat
-          [ ofDependencies spec.dependencies
-          , ofAction (getDirectories configDir spec)
+          [ ofDependencies spec.dependencies,
+            ofAction (getDirectories configDir spec)
               >>> mconcat
-                [ ofHandle prepareProfileDirs
-                , ofHandle (prepareSession spec)
-                , ofHandle setupEnvironment
-                , serviceModule spec
-                ]
-          , scripts >>> traversing_ (ofHandle executeScript)
-          , buildOnInstall
+                [ ofHandle prepareProfileDirs,
+                  ofHandle (prepareSession spec),
+                  ofHandle setupEnvironment,
+                  serviceModule spec
+                ],
+            scripts >>> traversing_ (ofHandle $ executeScript spec.profileProps.profileName),
+            buildOnInstall
           ]
     scripts = executableScripts $ \case
       Custom Install -> cfgFor <$> spec.installScript
@@ -138,44 +139,46 @@ profileForSpec configDir spec = profile
       _ -> pure ()
 
 -- | Executes the respective script, case-by-case basis since given args could be changed.
-executeScript :: FilePath -> Context ProfileMode -> IO ()
-executeScript script = \case
+executeScript :: T.Text -> FilePath -> Context ProfileMode -> IO ()
+executeScript name script = \case
   Custom Install -> do
-    printf "Install using %s...\n" script
+    logOn $ Custom Install
     callProcess script []
   Custom Remove -> do
-    printf "Remove using %s...\n" script
+    logOn $ Custom Remove
     callProcess script []
   InvokeOn BuildMode -> do
     -- It would be great to log to journal, but eh.. not needed anyway.
-    printf "Build through script %s...\n" script
+    logOn $ InvokeOn BuildMode
     callProcess script []
   InvokeOn RunMode -> pure () -- Services call the scripts, instead.
+  where
+    logOn mode = profileLog name (ProfileScriptPhase mode script)
 
 environments :: Directories -> M.Map String T.Text
 environments dirs =
   M.fromList
-    [ ("XMONAD_NAME", T.pack $ "xmonad-" <> arch <> "-" <> os)
-    , ("XMONAD_DATA_DIR", T.pack dirs.dataDir)
-    , ("XMONAD_CONFIG_DIR", T.pack dirs.configDir)
-    , ("XMONAD_CACHE_DIR", T.pack dirs.cacheDir)
+    [ ("XMONAD_NAME", T.pack $ "xmonad-" <> arch <> "-" <> os),
+      ("XMONAD_DATA_DIR", T.pack dirs.dataDir),
+      ("XMONAD_CONFIG_DIR", T.pack dirs.configDir),
+      ("XMONAD_CACHE_DIR", T.pack dirs.cacheDir)
     ]
 
 getDirectories :: FilePath -> ProfileSpec -> ManageEnv -> IO Directories
 getDirectories configDir spec mEnv = do
   dataDir <- getXdgDirectory XdgData (idStr spec.profileID)
-  -- Apparently the executable is a cache..
+  -- Apparently the executable should be in a cache..
   cacheDir <- getXdgDirectory XdgCache (idStr spec.profileID)
   serviceDir <- getServiceDirectory PerUserService
-  pure MkDirectories{databaseDir = mEnv.databaseDir, ..}
+  pure MkDirectories {databaseDir = mEnv.databaseDir, ..}
 
 prepareProfileDirs :: Directories -> Context a -> IO ()
 prepareProfileDirs dirs = \case
   Custom Install -> do
-    printf "Preparing profile directories...\n"
+    profileLog undefined $ PrepareDirectories Install
     traverse_ (createDirectoryIfMissing True) [dirs.dataDir, dirs.cacheDir]
   Custom Remove -> do
-    printf "Removing profile directories...\n"
+    profileLog undefined $ PrepareDirectories Remove
     traverse_ removePathForcibly [dirs.dataDir, dirs.cacheDir]
   InvokeOn _ -> pure ()
 
@@ -187,16 +190,16 @@ setupEnvironment dirs mode = traverse_ (uncurry putEnv) (M.toList $ environments
       _ -> setNormalEnv
 
 prepareSession :: ProfileSpec -> Directories -> Context a -> IO ()
-prepareSession ProfileSpec{..} dirs = \case
+prepareSession ProfileSpec {..} dirs = \case
   Custom Install -> do
-    printf "Installing xsession desktop entry...\n"
+    profileLog profileProps.profileName $ PrepareSession Install
     template <- readShellStringFile desktopTemplatePath
     desktopEntry <- shellExpandFromMap onEnvNotFound profileEnv template
     T.writeFile intermediatePath desktopEntry
     -- Instead of moving it around, we copy the runner. Fixes issues with SDDM.
     callProcess "sudo" ["cp", "-T", intermediatePath, sessionPath]
   Custom Remove -> do
-    printf "Removing xsession runner...\n"
+    profileLog profileProps.profileName $ PrepareSession Remove
     callProcess "sudo" ["rm", "-f", sessionPath]
   InvokeOn _ -> pure () -- Session is not something to invoke
   where
@@ -207,23 +210,25 @@ prepareSession ProfileSpec{..} dirs = \case
     onEnvNotFound key = fail $ printf "Profile variable %s not found" key
     profileEnv =
       M.fromList
-        [ ("PROFILE_ID", T.pack $ idStr profileID)
-        , ("PROFILE_NAME", profileProps.profileName)
-        , ("PROFILE_DETAILS", profileProps.profileDetails)
+        [ ("PROFILE_ID", T.pack $ idStr profileID),
+          ("PROFILE_NAME", profileProps.profileName),
+          ("PROFILE_DETAILS", profileProps.profileDetails)
         ]
 
+serviceNameOf :: FilePath -> String
 serviceNameOf templatePath = snd (splitFileName templatePath)
 
 serviceModule :: ProfileSpec -> ComponentCat ProfileMode Directories ()
 serviceModule spec = ofHandle declare <> installAllServices <> ofHandle apply
   where
-    installAllServices = traverse_ (ofHandle . installService) (spec.runService : spec.otherServices)
+    installAllServices = traverse_ (ofHandle . installService profileName) (spec.runService : spec.otherServices)
+    profileName = spec.profileProps.profileName
 
     declare _ = \case
       Custom Install -> pure ()
-      Custom Remove -> printf "Removing systemd services...\n"
-      InvokeOn BuildMode -> printf "Installing systemd services...\n"
-      InvokeOn RunMode -> printf "Run through service %s...\n" (serviceNameOf spec.runService)
+      Custom Remove -> profileLog profileName $ PrepareServices Remove
+      InvokeOn BuildMode -> profileLog profileName $ PrepareServices Install
+      InvokeOn RunMode -> profileLog profileName $ RunMainService (serviceNameOf spec.runService)
 
     apply dirs = \case
       Custom Install -> createDirectoryIfMissing True dirs.serviceDir
@@ -234,16 +239,16 @@ serviceModule spec = ofHandle declare <> installAllServices <> ofHandle apply
       InvokeOn RunMode -> do
         callProcess "systemctl" ["--user", "start", "--wait", serviceNameOf spec.runService]
 
-installService :: FilePath -> Directories -> Context ProfileMode -> IO ()
-installService templatePath dirs = \case
+installService :: T.Text -> FilePath -> Directories -> Context ProfileMode -> IO ()
+installService profileName templatePath dirs = \case
   -- Install on build to allow frequent changes of services
   InvokeOn BuildMode -> do
-    printf "Service %s being installed.\n" serviceName
+    profileLog profileName $ InstallService Install serviceName
     template <- readShellStringFile (dirs.configDir </> templatePath)
     service <- shellExpandFromMap onEnvNotFound (environments dirs) template
     T.writeFile (dirs.serviceDir </> serviceName) service
   Custom Remove -> do
-    printf "Service %s being removed.\n" serviceName
+    profileLog profileName $ InstallService Remove serviceName
     removeFile (dirs.serviceDir </> serviceName)
   _ -> pure ()
   where

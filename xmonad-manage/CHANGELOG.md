@@ -10,6 +10,8 @@
   - `xmonad-manage` saves has been stored in `~/.local/share/xmonad-manage`.
   - Respective profile data is stored in `~/.local/share/`, while cache is stored in `~/.cache`.
     Note that the cache contains the built executables from the profile.
+- Logging has been improved a bit.
+  - Now profile logs contain ID at its heading.
 
 ## 0.7.3
 - Removed update command, please use `./install.sh` instead.

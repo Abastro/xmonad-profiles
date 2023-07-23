@@ -13,6 +13,7 @@ module Modules (
 import Common
 import Component
 import Control.Exception
+import Control.Monad
 import Data.Foldable
 import Data.Map.Strict qualified as M
 import Data.Set qualified as S
@@ -42,9 +43,6 @@ instance FromYAML ModuleType where
 
 requiredTypes :: S.Set ModuleType
 requiredTypes = S.fromList [Compositor, Display]
-
-data ModuleMode = Start
-  deriving (Show, Enum, Bounded)
 
 data ModulePath = BuiltIn String | External FilePath
   deriving (Show, Generic)
@@ -112,12 +110,12 @@ combineWithBuiltins x11Module moduleSet =
 
     ownModuleDir mEnv userID = do
       userEntry <- getUserEntryForID userID
-      combinedLog $ OwnModuleDir mEnv.moduleDir userEntry.userName
+      combinedLog mEnv.moduleDir $ OwnModuleDir userEntry.userName
       callProcess "sudo" ["chown", "-R", show userID, mEnv.moduleDir]
 
     disownModuleDir mEnv origOwnerID = do
       origOwnerEntry <- getUserEntryForID origOwnerID
-      combinedLog $ DisownModuleDir mEnv.moduleDir origOwnerEntry.userName
+      combinedLog mEnv.moduleDir $ DisownModuleDir origOwnerEntry.userName
       callProcess "sudo" ["chown", "-R", show origOwnerID, mEnv.moduleDir]
 
 data ModuleSpec = ModuleSpec
@@ -154,11 +152,9 @@ activeModules :: ManageEnv -> IO (ModuleSet (Component ModuleMode))
 activeModules mEnv = do
   ActiveModules{..} <- readYAMLFile ActiveConfigWrongFormat (mEnv.configDir </> "active-modules.yaml")
   loaded <- traverse (uncurry $ loadModule mEnv) (setWithTypes activeSet)
-  if requiredTypes `S.isSubsetOf` M.keysSet loaded.typedModules
-    then pure loaded
-    else do
-      -- TODO Better error message here
-      throwIO RequiredModuleMissing
+  unless (requiredTypes `S.isSubsetOf` M.keysSet loaded.typedModules) $ do
+    throwIO RequiredModuleMissing -- TODO Better error here
+  pure loaded
 
 -- | Tries to load a module, and throws error if not in the desired type.
 loadModule :: ManageEnv -> Maybe ModuleType -> ModulePath -> IO (Component ModuleMode)
@@ -190,22 +186,22 @@ moduleForSpec moduleDir spec =
 executeScript :: ModuleSpec -> FilePath -> Context ModuleMode -> IO ()
 executeScript spec script = \case
   Custom Install -> do
-    printf "[%s] Module installation using %s...\n" spec.name script
+    moduleLog spec.name $ ModuleScriptPhase (Custom Install) Pre script
     callProcess script []
   Custom Remove -> pure ()
   InvokeOn Start -> do
-    printf "[%s] Setting up using %s...\n" spec.name script
+    moduleLog spec.name $ ModuleScriptPhase (InvokeOn Start) Pre script
     callProcess script []
-    printf "[%s] Setup complete.\n" spec.name
+    moduleLog spec.name $ ModuleScriptPhase (InvokeOn Start) Post script
 
 setupEnvironment :: ModuleSpec -> ManageEnv -> Context ModuleMode -> IO ()
 setupEnvironment spec _ = \case
   Custom Install -> do
-    printf "[%s] Checking shell expansions...\n" spec.name
+    moduleLog spec.name ModuleCheckShellExpand
     forInEnv (printf "%s=%s\n")
   Custom Remove -> pure ()
   InvokeOn Start -> do
-    printf "[%s] Setting up...\n" spec.name
+    moduleLog spec.name ModuleSetupEnvironment
     forInEnv setServiceEnv
   where
     forInEnv act = for_ (M.toList spec.environment) $ \(key, str) -> do
