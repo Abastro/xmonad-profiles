@@ -138,9 +138,9 @@ handleOption mEnv@ManageEnv{home} = \case
     putStrLn "Available profiles:"
     for_ profiles $ \cfgPath -> do
       ProfileSpec{..} <- readProfileSpec cfgPath
-      printf "- %s (%s)\n" (idStr profileID) profileProps.profileName
+      printf "- %s (%s)\n" (idStr profileID) profileName
       printf "    Config at: %s\n" cfgPath
-      printf "    %s\n" profileProps.profileDetails
+      printf "    %s\n" profileDetails
 
   -- Profile-specific installation
   InstallProf idOrPath installCond -> do

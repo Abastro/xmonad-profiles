@@ -4,7 +4,6 @@ module Profile
     removeProfile,
     getProfilePath,
     profilePaths,
-    ProfileProps (..),
     ProfileSpec (..),
     ProfileError (..),
     ProfileMode (..),
@@ -58,15 +57,10 @@ getProfilePath ident ips = ips.profiles M.!? ident
 profilePaths :: InstalledProfiles -> [FilePath]
 profilePaths ips = M.elems ips.profiles
 
-data ProfileProps = ProfileProps
-  { profileName :: !T.Text,
-    profileDetails :: !T.Text
-  }
-  deriving (Show)
-
 data ProfileSpec = ProfileSpec
   { profileID :: !ID,
-    profileProps :: !ProfileProps,
+    profileName :: !T.Text,
+    profileDetails :: !T.Text,
     installScript :: !(Maybe FilePath),
     buildScript, runService :: !FilePath,
     otherServices :: [FilePath],
@@ -79,7 +73,8 @@ instance FromYAML ProfileSpec where
   parseYAML = withMap "profile" $ \m ->
     ProfileSpec
       <$> (m .: "ID")
-      <*> (ProfileProps <$> m .: "name" <*> m .: "details")
+      <*> (m .: "name")
+      <*> (m .: "details")
       <*> (fmap T.unpack <$> m .:? "install")
       <*> (T.unpack <$> m .: "build")
       <*> (T.unpack <$> m .: "run-service")
@@ -123,7 +118,7 @@ profileForSpec configDir spec = profile
                   ofHandle setupEnvironment,
                   serviceModule spec
                 ],
-            scripts >>> traversing_ (ofHandle $ executeScript spec.profileProps.profileName),
+            scripts >>> traversing_ (ofHandle $ executeScript spec.profileName),
             buildOnInstall
           ]
     scripts = executableScripts $ \case
@@ -190,16 +185,16 @@ setupEnvironment dirs mode = traverse_ (uncurry putEnv) (M.toList $ environments
       _ -> setNormalEnv
 
 prepareSession :: ProfileSpec -> Directories -> Context a -> IO ()
-prepareSession ProfileSpec {..} dirs = \case
+prepareSession ProfileSpec{..} dirs = \case
   Custom Install -> do
-    profileLog profileProps.profileName $ PrepareSession Install
+    profileLog profileName $ PrepareSession Install
     template <- readShellStringFile desktopTemplatePath
     desktopEntry <- shellExpandFromMap onEnvNotFound profileEnv template
     T.writeFile intermediatePath desktopEntry
     -- Instead of moving it around, we copy the runner. Fixes issues with SDDM.
     callProcess "sudo" ["cp", "-T", intermediatePath, sessionPath]
   Custom Remove -> do
-    profileLog profileProps.profileName $ PrepareSession Remove
+    profileLog profileName $ PrepareSession Remove
     callProcess "sudo" ["rm", "-f", sessionPath]
   InvokeOn _ -> pure () -- Session is not something to invoke
   where
@@ -211,8 +206,8 @@ prepareSession ProfileSpec {..} dirs = \case
     profileEnv =
       M.fromList
         [ ("PROFILE_ID", T.pack $ idStr profileID),
-          ("PROFILE_NAME", profileProps.profileName),
-          ("PROFILE_DETAILS", profileProps.profileDetails)
+          ("PROFILE_NAME", profileName),
+          ("PROFILE_DETAILS", profileDetails)
         ]
 
 serviceNameOf :: FilePath -> String
@@ -222,7 +217,7 @@ serviceModule :: ProfileSpec -> ComponentCat ProfileMode Directories ()
 serviceModule spec = ofHandle declare <> installAllServices <> ofHandle apply
   where
     installAllServices = traverse_ (ofHandle . installService profileName) (spec.runService : spec.otherServices)
-    profileName = spec.profileProps.profileName
+    profileName = spec.profileName
 
     declare _ = \case
       Custom Install -> pure ()

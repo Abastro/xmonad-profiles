@@ -1,15 +1,16 @@
 -- | References for states and logs.
-module References (
-  PrePost (..),
-  ProfileMode (..),
-  ProfileLog (..),
-  profileLog,
-  ModuleCombinedLog (..),
-  combinedLog,
-  ModuleMode (..),
-  ModuleLog (..),
-  moduleLog,
-) where
+module References
+  ( PrePost (..),
+    ProfileMode (..),
+    ProfileLog (..),
+    profileLog,
+    ModuleCombinedLog (..),
+    combinedLog,
+    ModuleMode (..),
+    ModuleLog (..),
+    moduleLog,
+  )
+where
 
 import Common
 import Component
@@ -18,6 +19,9 @@ import Text.Printf
 
 data PrePost = Pre | Post
   deriving (Show, Eq, Enum, Bounded)
+
+prefixed :: (PrintfType r) => T.Text -> String -> r
+prefixed prefix str = printf ("[" <> T.unpack prefix <> "] " <> str)
 
 data ProfileMode = BuildMode | RunMode
   deriving (Show, Eq, Enum, Bounded)
@@ -35,32 +39,35 @@ profileLog :: T.Text -> ProfileLog -> IO ()
 profileLog name = \case
   -- Scripts
   ProfileScriptPhase (Custom Install) script ->
-    printf "[%s] Install using %s...\n" name script
+    logger "Install using %s...\n" script
   ProfileScriptPhase (Custom Remove) script ->
-    printf "[%s] Remove using %s...\n" name script
+    logger "Remove using %s...\n" script
   ProfileScriptPhase (InvokeOn BuildMode) script ->
-    printf "[%s] Build through script %s...\n" name script
+    logger "Build through script %s...\n" script
   --
   PrepareDirectories Install ->
-    printf "[%s] Preparing profile directories...\n" name
+    logger "Preparing profile directories...\n"
   PrepareDirectories Remove ->
-    printf "[%s] Removing profile directories...\n" name
+    logger "Removing profile directories...\n"
   --
   PrepareSession Install ->
-    printf "[%s] Installing xsession desktop entry...\n" name
+    logger "Installing xsession desktop entry...\n"
   PrepareSession Remove ->
-    printf "[%s] Removing xsession desktop entry...\n" name
+    logger "Removing xsession desktop entry...\n"
   --
   PrepareServices Install ->
-    printf "[%s] Installing systemd services...\n" name
+    logger "Installing systemd services...\n"
   PrepareServices Remove ->
-    printf "[%s] Removing systemd services...\n" name
+    logger "Removing systemd services...\n"
   --
   InstallService Install serviceName ->
-    printf "[%s] Service %s being installed.\n" name serviceName
+    logger "Service %s being installed.\n" serviceName
   InstallService Remove serviceName ->
-    printf "[%s] Service %s being removed.\n" name serviceName
+    logger "Service %s being removed.\n" serviceName
   _ -> pure ()
+  where
+    logger :: (PrintfType r) => String -> r
+    logger = prefixed name
 
 data ModuleCombinedLog = OwnModuleDir !String | DisownModuleDir !String
   deriving (Show)
@@ -86,15 +93,18 @@ data ModuleLog
 moduleLog :: T.Text -> ModuleLog -> IO ()
 moduleLog name = \case
   ModuleScriptPhase (Custom Install) Pre script ->
-    printf "[%s] Module installation using %s...\n" name script
-  -- Setting up on Start
+    logger "Module installation using %s...\n" script
+  --
   ModuleScriptPhase (InvokeOn Start) Pre script ->
-    printf "[%s] Setting up using %s...\n" name script
+    logger "Setting up using %s...\n" script
   ModuleScriptPhase (InvokeOn Start) Post _ ->
-    printf "[%s] Setup complete.\n" name
-  -- Shell environments
+    logger "Setup complete.\n"
+  --
   ModuleCheckShellExpand ->
-    printf "[%s] Checking shell expansions...\n" name
+    logger "Checking shell expansions...\n"
   ModuleSetupEnvironment ->
-    printf "[%s] Setting up...\n" name
+    logger "Setting up...\n"
   _ -> pure ()
+  where
+    logger :: (PrintfType r) => String -> r
+    logger = prefixed name
