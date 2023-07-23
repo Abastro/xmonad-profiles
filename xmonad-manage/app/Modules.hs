@@ -172,10 +172,11 @@ moduleForSpec moduleDir spec =
   withIdentifier (UnsafeMakeID $ T.unpack spec.name) $
     mconcat
       [ ofDependencies spec.dependencies
-      , ofHandle (setupEnvironment spec)
-      , scripts >>> traversing_ (ofHandle $ executeScript spec)
+      , ofHandle (setupEnvironment logger spec)
+      , scripts >>> traversing_ (ofHandle $ executeScript logger)
       ]
   where
+    logger = moduleLog spec.name
     scripts = executableScripts $ \case
       Custom Install -> scriptFor <$> spec.install
       Custom Remove -> Nothing
@@ -183,25 +184,25 @@ moduleForSpec moduleDir spec =
 
     scriptFor path = moduleDir </> path
 
-executeScript :: ModuleSpec -> FilePath -> Context ModuleMode -> IO ()
-executeScript spec script = \case
+executeScript :: (ModuleLog -> IO ()) -> FilePath -> Context ModuleMode -> IO ()
+executeScript logger script = \case
   Custom Install -> do
-    moduleLog spec.name $ ModuleScriptPhase (Custom Install) Pre script
+    logger $ ModuleScriptPhase (Custom Install) Pre script
     callProcess script []
   Custom Remove -> pure ()
   InvokeOn Start -> do
-    moduleLog spec.name $ ModuleScriptPhase (InvokeOn Start) Pre script
+    logger $ ModuleScriptPhase (InvokeOn Start) Pre script
     callProcess script []
-    moduleLog spec.name $ ModuleScriptPhase (InvokeOn Start) Post script
+    logger $ ModuleScriptPhase (InvokeOn Start) Post script
 
-setupEnvironment :: ModuleSpec -> ManageEnv -> Context ModuleMode -> IO ()
-setupEnvironment spec _ = \case
+setupEnvironment :: (ModuleLog -> IO ()) -> ModuleSpec -> ManageEnv -> Context ModuleMode -> IO ()
+setupEnvironment logger spec _ = \case
   Custom Install -> do
-    moduleLog spec.name ModuleCheckShellExpand
+    logger ModuleCheckShellExpand
     forInEnv (printf "%s=%s\n")
   Custom Remove -> pure ()
   InvokeOn Start -> do
-    moduleLog spec.name ModuleSetupEnvironment
+    logger ModuleSetupEnvironment
     forInEnv setServiceEnv
   where
     forInEnv act = for_ (M.toList spec.environment) $ \(key, str) -> do
