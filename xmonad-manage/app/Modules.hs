@@ -6,15 +6,13 @@ module Modules (
   ModulePath (..),
   ModuleSet (..),
   ModuleSpec (..),
-  loadActiveCfg,
-  specifiedActiveModules,
+  activeModules,
   combineWithBuiltins,
 ) where
 
 import Common
 import Component
 import Control.Exception
-import Control.Monad
 import Data.Foldable
 import Data.Map.Strict qualified as M
 import Data.Set qualified as S
@@ -24,7 +22,6 @@ import GHC.Generics
 import Manages
 import Packages
 import System.FilePath
-import System.IO
 import System.Posix hiding (Start)
 import System.Process
 import Text.Printf
@@ -61,6 +58,13 @@ data ModuleSet a = ModuleSetOf
   }
   deriving (Show, Functor, Foldable, Traversable, Generic)
 
+setWithTypes :: ModuleSet a -> ModuleSet (Maybe ModuleType, a)
+setWithTypes aSet =
+  ModuleSetOf
+    { typedModules = M.mapWithKey (\k v -> (Just k, v)) aSet.typedModules
+    , otherModules = map (Nothing,) aSet.otherModules
+    }
+
 -- | Denotes the module configuration.
 newtype ActiveModules = ActiveModules
   { activeSet :: ModuleSet ModulePath
@@ -81,32 +85,10 @@ instance FromYAML ActiveModules where
     ActiveModules <$> do
       ModuleSetOf <$> (m .: "typed-modules") <*> (m .:? "other-modules" .!= [])
 
--- TODO Merge with loadModule to produce `ModuleSet (Component ModuleMode)`
-loadActiveCfg :: ManageEnv -> IO (ModuleSet ModulePath)
-loadActiveCfg mEnv = do
-  ActiveModules{..} <- readYAMLFile userError (mEnv.configDir </> "active-modules.yaml")
-  verified <- M.traverseWithKey verifyType activeSet.typedModules
-  let adjusted = activeSet{typedModules = verified}
-  if requiredTypes `S.isSubsetOf` M.keysSet adjusted.typedModules
-    then pure adjusted
-    else fail "Required modules are absent." -- IDK, do I improve this error message?
-    -- ? How to: Parse, not validate?
-  where
-    verifyType typ modulePath = do
-      ModuleSpec{..} <- readModuleSpec userError (canonPath mEnv modulePath)
-      unless (moduleType == Just typ) $ do
-        hPrintf stderr "Module %s is specified for type %s, yet it has type %s.\n" name (show typ) (show moduleType)
-        fail "Wrong module for the type."
-      pure modulePath
-
 canonPath :: ManageEnv -> ModulePath -> FilePath
 canonPath mEnv = \case
   BuiltIn ident -> mEnv.moduleDir </> ident
   External path -> path
-
--- | Loads and gives the (list of) specified active modules.
-specifiedActiveModules :: ManageEnv -> ModuleSet ModulePath -> IO (ModuleSet (Component ModuleMode))
-specifiedActiveModules mEnv = traverse (loadModule . canonPath mEnv)
 
 -- | Takes X11 module as a parameter, and combines it with rest of modules.
 combineWithBuiltins :: Component ModuleMode -> ModuleSet (Component ModuleMode) -> Component ModuleMode
@@ -166,18 +148,35 @@ instance FromYAML ModuleSpec where
       <*> (m .:? "environment" .!= M.empty)
       <*> (m .:? "dependencies" .!= [])
 
--- TODO IO Error handling & printing
 data ModuleError
   = ModuleIOError FilePath IOError
   | ModuleWrongFormat String
+  | ActiveConfigWrongFormat String
+  | ModuleTypeMismatch T.Text (Maybe ModuleType) (Maybe ModuleType)
+  | RequiredModuleMissing
   deriving (Show)
 instance Exception ModuleError
 
-readModuleSpec :: (Exception e) => (String -> e) -> FilePath -> IO ModuleSpec
-readModuleSpec asException moduleDir = readYAMLFile asException (moduleDir </> "module.yaml")
+activeModules :: ManageEnv -> IO (ModuleSet (Component ModuleMode))
+activeModules mEnv = do
+  ActiveModules{..} <- readYAMLFile ActiveConfigWrongFormat (mEnv.configDir </> "active-modules.yaml")
+  loaded <- traverse (uncurry $ loadModule mEnv) (setWithTypes activeSet)
+  if requiredTypes `S.isSubsetOf` M.keysSet loaded.typedModules
+    then pure loaded
+    else do
+      -- TODO Better error message here
+      throwIO RequiredModuleMissing
 
-loadModule :: FilePath -> IO (Component ModuleMode)
-loadModule moduleDir = moduleForSpec moduleDir <$> readModuleSpec ModuleWrongFormat moduleDir
+-- | Tries to load a module, and throws error if not in the desired type.
+loadModule :: ManageEnv -> Maybe ModuleType -> ModulePath -> IO (Component ModuleMode)
+loadModule mEnv expectedTyp modulePath = wrapIOError $ do
+  spec@ModuleSpec{moduleType, name} <- readYAMLFile ModuleWrongFormat (moduleDir </> "module.yaml")
+  if moduleType == expectedTyp
+    then throwIO $ ModuleTypeMismatch name expectedTyp moduleType
+    else pure $ moduleForSpec moduleDir spec
+  where
+    moduleDir = canonPath mEnv modulePath
+    wrapIOError = handle @IOError (throwIO . ModuleIOError moduleDir)
 
 moduleForSpec :: FilePath -> ModuleSpec -> Component ModuleMode
 moduleForSpec moduleDir spec =

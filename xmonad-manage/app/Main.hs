@@ -41,6 +41,7 @@ import X11
 -- * Overriding by local directories would be available later.
 
 -- TODO Give choice for profile to keep separate directory for cabal installations. (CABAL_DIR)
+-- TODO IO Error handling & printing everywhere
 
 data Action
   = ResetSave
@@ -120,14 +121,14 @@ handleOption mEnv@ManageEnv{home} = \case
 
   -- Main installation
   Setup installCond -> do
-    specifiedModules <- specifiedActiveModules mEnv =<< loadActiveCfg mEnv
+    actives <- activeModules mEnv
 
     putStrLn "Active modules to install:"
-    printActive specifiedModules
+    printActive actives
     putStrLn "Proceed? (Ctrl+C to cancel)"
     _ <- getLine
 
-    let combined = combineWithBuiltins x11Module specifiedModules
+    let combined = combineWithBuiltins x11Module actives
     pkgData <- loadPackageData mEnv
     install mEnv pkgData installCond combined
 
@@ -168,8 +169,8 @@ handleOption mEnv@ManageEnv{home} = \case
   RunProf profID -> withProfPath profID $ \cfgPath -> do
     redirectLogs >> updatePATH home -- PATH needs updating
     withCurrentDirectory home $ do
-      modules <- specifiedActiveModules mEnv =<< loadActiveCfg mEnv
-      invoke mEnv Start (combineWithBuiltins x11Module modules)
+      actives <- activeModules mEnv
+      invoke mEnv Start (combineWithBuiltins x11Module actives)
 
       putStrLn "Booting xmonad..."
       invoke mEnv RunMode =<< loadProfile cfgPath
