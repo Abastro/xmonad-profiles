@@ -193,7 +193,7 @@ prepareSession ProfileSpec{..} dirs = \case
     template <- readShellStringFile desktopTemplatePath
     desktopEntry <- shellExpandFromMap onEnvNotFound profileEnv template
     T.writeFile intermediatePath desktopEntry
-    -- Instead of linking, we copy the runner. Fixes issues with SDDM.
+    -- Instead of moving it around, we copy the runner. Fixes issues with SDDM.
     callProcess "sudo" ["cp", "-T", intermediatePath, sessionPath]
   Custom Remove -> do
     printf "Removing xsession runner...\n"

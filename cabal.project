@@ -2,7 +2,5 @@ packages:
   xmonad-manage/xmonad-manage.cabal
   xmonad-test/*
 
-with-compiler: ghc-9.4.5
-
 package *
   ghc-options: -haddock
