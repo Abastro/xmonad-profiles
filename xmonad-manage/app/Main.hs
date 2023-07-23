@@ -44,6 +44,8 @@ import X11
 
 -- TODO Give choice for profile to keep separate directory for cabal installations. (CABAL_DIR)
 -- TODO IO Error handling & Printing everywhere
+-- TODO Display config in user-specific configuration
+-- TODO Use pkg-config to detect package
 
 data Action
   = ResetSave

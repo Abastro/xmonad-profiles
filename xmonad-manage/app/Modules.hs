@@ -150,7 +150,7 @@ instance Exception ModuleError
 
 activeModules :: ManageEnv -> IO (ModuleSet (Component ModuleMode))
 activeModules mEnv = do
-  ActiveModules{..} <- readYAMLFile ActiveConfigWrongFormat (mEnv.configDir </> "active-modules.yaml")
+  ActiveModules{..} <- readYAMLFile ActiveConfigWrongFormat (mEnv.configSharedDir </> "active-modules.yaml")
   loaded <- traverse (uncurry $ loadModule mEnv) (setWithTypes activeSet)
   unless (requiredTypes `S.isSubsetOf` M.keysSet loaded.typedModules) $ do
     throwIO RequiredModuleMissing -- TODO Better error here

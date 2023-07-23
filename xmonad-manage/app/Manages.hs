@@ -48,15 +48,15 @@ restore Proxy = initialize @a >>= (savedVar $=)
 
 data ManageEnv = ManageEnv
   { home :: !FilePath
-  , configDir :: !FilePath
-  , moduleDir :: !FilePath
-  , databaseDir :: !FilePath
+  , configSharedDir, configUserDir :: !FilePath
+  , moduleDir, databaseDir :: !FilePath
   }
 
 makeManageEnv :: IO ManageEnv
 makeManageEnv = do
   home <- getHomeDirectory
-  let configDir = localDirectory FHSConfig </> "xmonad-manage"
+  let configSharedDir = localDirectory FHSConfig </> "xmonad-manage"
       moduleDir = localDirectory FHSShare </> "xmonad-manage" </> "modules"
       databaseDir = localDirectory FHSShare </> "xmonad-manage" </> "database"
+  configUserDir <- getXdgDirectory XdgConfig "xmonad-manage"
   pure ManageEnv{..}

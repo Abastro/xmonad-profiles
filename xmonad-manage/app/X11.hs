@@ -24,7 +24,7 @@ data DisplayConfig = DisplayConfig
   }
   deriving (Show)
 
--- TODO Override display configuration by local config directory
+-- TODO What if the configuration file is missing?
 instance FromYAML DisplayConfig where
   parseYAML :: Node Pos -> Parser DisplayConfig
   parseYAML = withMap "display-config" $ \m ->
@@ -35,11 +35,10 @@ instance FromYAML DisplayConfig where
       <*> (m .: "Cursor-Theme")
 
 loadDisplayCfg :: ManageEnv -> IO DisplayConfig
-loadDisplayCfg mEnv = readYAMLFile userError (mEnv.configDir </> "display-config.yaml")
+loadDisplayCfg mEnv = readYAMLFile userError (mEnv.configUserDir </> "display-config.yaml")
 
 data SettingsValue = SetFlag !Bool | SetInt !Int | SetText !T.Text
 
--- TODO Review if these are all good values.
 xresourcesCfg :: DisplayConfig -> [(T.Text, SettingsValue)]
 xresourcesCfg DisplayConfig{..} =
   [ -- Font rendering
