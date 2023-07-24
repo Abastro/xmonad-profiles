@@ -160,7 +160,7 @@ activeModules mEnv = do
 loadModule :: ManageEnv -> Maybe ModuleType -> ModulePath -> IO (Component ModuleMode)
 loadModule mEnv expectedTyp modulePath = wrapIOError $ do
   spec@ModuleSpec{moduleType, name} <- readYAMLFile ModuleWrongFormat (moduleDir </> "module.yaml")
-  if moduleType == expectedTyp
+  if moduleType /= expectedTyp
     then throwIO $ ModuleTypeMismatch name expectedTyp moduleType
     else pure $ moduleForSpec moduleDir spec
   where
