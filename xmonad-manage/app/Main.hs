@@ -167,10 +167,11 @@ handleOption mEnv@ManageEnv{home} = \case
 
   -- Automatic profile run
   RunProf profID -> withProfPath profID $ \cfgPath -> do
-    putStrLn "Current environment:"
+    redirectLogs
+    putStrLn "Inherited environment:"
     getEnvironment >>= traverse_ (uncurry $ printf "%s=%s\n")
     putStrLn ""
-    redirectLogs >> updatePATH home -- PATH needs updating
+    updatePATH home -- PATH needs updating
     withCurrentDirectory home $ do
       actives <- activeModules mEnv
       invoke mEnv Start (combineWithBuiltins x11Module actives)
