@@ -1,5 +1,5 @@
 # [Important] Do not edit config files in config-user/ directory, it is to be used as a template.
-# For now, update is only applied on setup.
+# Reflected on login.
 
 # HiDPI Scaling; Only supports integer values.
 Scaling-Factor: 2

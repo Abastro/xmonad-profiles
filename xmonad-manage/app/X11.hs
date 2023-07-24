@@ -127,17 +127,14 @@ handleXSetup = \case
   _ -> pure ()
 
 handleXresources :: ThisEnv -> Context ModuleMode -> IO ()
-handleXresources (ThisEnv home displayCfg) = \case
-  Custom Install -> do
-    printf "[X11] Installing X-resources...\n"
-    T.writeFile xresourcesPath $ xresourcesText (xresourcesCfg displayCfg)
-  Custom Remove -> do
-    printf "You may remove installed X-resources config %s.\n" xresourcesPath
+handleXresources (ThisEnv _ displayCfg) = \case
+  Custom _ -> pure ()
   InvokeOn Start -> do
     printf "[X11] Reflect X-resources.\n"
-    callProcess "xrdb" ["-merge", xresourcesPath]
-  where
-    xresourcesPath = home </> ".Xresources"
+    withTemporaryDirectory $ \tmpDir -> do
+      let xresourcesPath = tmpDir </> ".Xresources"
+      T.writeFile xresourcesPath $ xresourcesText (xresourcesCfg displayCfg)
+      callProcess "xrdb" ["-merge", xresourcesPath]
 
 handleXsettings :: ThisEnv -> Context ModuleMode -> IO ()
 handleXsettings (ThisEnv _ displayCfg) = \case
