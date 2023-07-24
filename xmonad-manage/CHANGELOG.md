@@ -1,5 +1,6 @@
 # Changelog
-## master (0.8.0)
+## master (0.8.1)
+## 0.8.0
 - **! Required to run both `xmonad-manage setup` and re-installing your profile !**
 - **Changed the install directory to `/usr/local`.**
   - `xmonad-manage` executable is copied into `/usr/local/bin`.
