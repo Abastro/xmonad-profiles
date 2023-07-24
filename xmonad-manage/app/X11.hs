@@ -101,14 +101,17 @@ x11Module = withIdentifier (UnsafeMakeID "x11") $ xmonadDeps <> (getConfig >>> x
       MkComponent
         { dependencies = [AsPackage "xsetroot"]
         , identifier = UnsafeMakeID "xsetup"
-        , handle = \_ -> \case
-            InvokeOn Start -> do
-              callProcess "xrandr" []
-              callProcess "xsetroot" ["-cursor_name", "left_ptr"]
-            _ -> pure ()
+        , handle = const handleXSetup
         }
     getConfig = ofAction $ \mEnv -> do
       ThisEnv mEnv.home <$> loadDisplayCfg mEnv <*> getXdgDirectory XdgConfig "xsettingsd"
+
+handleXSetup :: Context ModuleMode -> IO ()
+handleXSetup = \case
+  InvokeOn Start -> do
+    callProcess "xrandr" []
+    callProcess "xsetroot" ["-cursor_name", "left_ptr"]
+  _ -> pure ()
 
 handleXresources :: ThisEnv -> Context ModuleMode -> IO ()
 handleXresources (ThisEnv home displayCfg _) = \case

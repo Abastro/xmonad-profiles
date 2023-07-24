@@ -41,8 +41,7 @@ import X11
 -- ? Give choice for profile to keep separate directory for cabal installations. (CABAL_DIR)
 
 -- TODO Later:
--- TODO IO Error handling & Printing everywhere
--- TODO ??
+-- TODO Display Configuration
 
 data Action
   = ResetSave
