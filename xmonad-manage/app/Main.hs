@@ -28,23 +28,19 @@ import System.IO
 import Text.Printf
 import X11
 
--- * Fetches from separate configuration directory for each profile.
-
 -- ? Consider: do not install system packages, and instead check for existence of packages?
 -- ? Long-term: Add proxy for package removal.
 
 -- ? Stay up-to-date appropriately corresponding to GHC Updates - How?
 -- If this were statically compiled, it would not matter, but it will take more size.
 
--- * Profiles are kept for individual users,
+--  * Profiles are kept for individual users,
+--  * while data files and shared config files are shared in /usr/local.
+--  * Also, each profile has separate configuration directory to fetch from.
 
--- * while data files and config files are shared in /usr/local.
+-- ? Give choice for profile to keep separate directory for cabal installations. (CABAL_DIR)
 
--- * Overriding by local directories would be available later.
-
--- TODO Give choice for profile to keep separate directory for cabal installations. (CABAL_DIR)
 -- TODO IO Error handling & Printing everywhere
--- TODO Display config in user-specific configuration
 -- TODO Use pkg-config to detect package
 
 data Action
