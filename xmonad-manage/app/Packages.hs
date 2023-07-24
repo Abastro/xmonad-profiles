@@ -28,6 +28,7 @@ import System.FilePath
 import System.IO
 import System.Process
 import Text.Printf
+import GHC.IO.Exception (ExitCode(ExitSuccess))
 
 -- | Manager ID, could be either distribution or installation medium.
 newtype ManageID = ManageIDOf T.Text
@@ -213,4 +214,7 @@ detectInstalled target = \case
   _ -> pure (Right target) -- No way to detect in this case
   where
     hasExecutable exe = isJust <$> findExecutable (T.unpack exe)
-    hasLibrary _ = pure False -- Currently, cannot detect libraries
+    -- Use pkg-config to detect presence of a library.
+    hasLibrary lib = do
+      (exitCode, _, _) <- readProcessWithExitCode "pkg-config" [T.unpack lib] ""
+      pure (exitCode == ExitSuccess)

@@ -27,6 +27,8 @@ commons:
 # Missing "naming" field means its ID serves as names.
 # If a package is not available in certain platforms, then "naming" field must be specified.
 # It also needs to be specified if a package is available through common installers.
+# Executable components are the name of the command,
+# while library components are the corresponding entries in pkg-config.
 packages:
 # Haskell executables
   xmonad:
@@ -45,22 +47,37 @@ packages:
       haskell: "status-notifier-item"
 # Development
   libxss:
+    components:
+      library:
+      - "xscrnsaver"
     naming:
       ubuntu: "libxss-dev"
       arch: "libxss"
   alsa-dev:
+    components: 
+      library:
+      - "alsa"
     naming:
       ubuntu: "libasound2-dev"
       arch: "alsa-lib"
   gtk3-dev:
+    components:
+      library:
+      - "gtk+-3.0"
     naming:
       ubuntu: "libgtk-3-dev"
       arch: "gtk3"
   libgirepository:
+    components:
+      library:
+      - "gobject-introspection-1.0"
     naming:
       ubuntu: "libgirepository1.0-dev"
       arch: "gobject-introspection"
   libdbusmenu-gtk3:
+    components:
+      library:
+      - "dbusmenu-gtk3-0.4" # ? Is this fine to have the specific version?
     naming:
       ubuntu: "libdbusmenu-gtk3-dev"
       arch: "libdbusmenu-gtk3"
