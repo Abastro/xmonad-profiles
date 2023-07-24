@@ -22,13 +22,13 @@ import Data.Maybe
 import Data.Set qualified as S
 import Data.Text qualified as T
 import Data.YAML
+import GHC.IO.Exception (ExitCode (ExitSuccess))
 import Manages
-import System.Directory (findExecutable)
+import System.Directory (findExecutable, findFile)
 import System.FilePath
 import System.IO
 import System.Process
 import Text.Printf
-import GHC.IO.Exception (ExitCode(ExitSuccess))
 
 -- | Manager ID, could be either distribution or installation medium.
 newtype ManageID = ManageIDOf T.Text
@@ -94,6 +94,8 @@ emptyInfo = PackageInfo Nothing Nothing
 data Components = WithComponents
   { executable :: [T.Text]
   , library :: [T.Text]
+  , exeDirectories :: [FilePath]
+  -- ^ Additional paths to check for the executable.
   }
   deriving (Show)
 
@@ -109,6 +111,7 @@ instance FromYAML Components where
     WithComponents
       <$> (m .:? "executable" .!= [])
       <*> (m .:? "library" .!= [])
+      <*> (map T.unpack <$> m .:? "exe-directories" .!= [])
 
 data PackagesError
   = DatabaseMalformed String
@@ -208,12 +211,15 @@ data Existing = Exists
 detectInstalled :: T.Text -> PackageInfo -> IO (Either Existing T.Text)
 detectInstalled target = \case
   PackageInfo{components = Just WithComponents{..}} -> do
-    hasAllExes <- and <$> traverse hasExecutable executable
+    hasAllExes <- and <$> traverse (hasExecutable exeDirectories) executable
     hasAllLibs <- and <$> traverse hasLibrary library
     pure $ if hasAllExes && hasAllLibs then Left Exists else Right target
   _ -> pure (Right target) -- No way to detect in this case
   where
-    hasExecutable exe = isJust <$> findExecutable (T.unpack exe)
+    hasExecutable searchPath exe = do
+      inPath <- findExecutable (T.unpack exe)
+      inSearch <- findFile searchPath (T.unpack exe)
+      pure (isJust inPath || isJust inSearch)
     -- Use pkg-config to detect presence of a library.
     hasLibrary lib = do
       (exitCode, _, _) <- readProcessWithExitCode "pkg-config" [T.unpack lib] ""
