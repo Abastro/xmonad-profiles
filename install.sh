@@ -24,9 +24,11 @@ if [ -d "$shared_config/$app_id" ]; then
   echo "Shared configuration found in $shared_config/$app_id."
 elif [ -d "config" ]; then
   echo "Copying existing shared configuration onto $shared_config/$app_id..."
+  mkdir -p "$shared_config/$app_id"
   sudo cp -rT "config/active-modules.yaml" "$shared_config/$app_id/active-modules.yaml"
 else
   echo "Copying shared configuration template onto $shared_config/$app_id..."
+  mkdir -p "$shared_config/$app_id"
   sudo cp -rT "config-shared" "$shared_config/$app_id"
 fi
 
@@ -34,13 +36,16 @@ if [ -d "$user_config/$app_id" ]; then
   echo "User configuration found in $user_config/$app_id."
 elif [ -d "config" ]; then
   echo "Copying existing user configuration onto $user_config/$app_id..."
+  mkdir -p "$user_config/$app_id"
   cp -rT "config/display-config.yaml" "$user_config/$app_id/display-config.yaml"
 else
   echo "Copying user configuration template onto $user_config/$app_id..."
+  mkdir -p "$user_config/$app_id"
   cp -rT "config-user" "$user_config/$app_id"
 fi
 
 echo "Installing data files into $shared_share/$app_id..."
+mkdir -p "$shared_share/$app_id"
 sudo cp -rT --no-preserve=mode "database" "$shared_share/$app_id/database"
 sudo cp -rT --no-preserve=mode "modules" "$shared_share/$app_id/modules"
 
