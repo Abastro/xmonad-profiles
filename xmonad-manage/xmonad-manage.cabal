@@ -47,4 +47,4 @@ executable xmonad-manage
     , cereal ==0.5.*
   hs-source-dirs:   app
   default-language: GHC2021
-  ghc-options:      -W -threaded -with-rtsopts="-N"
+  ghc-options:      -W -threaded -rtsopts "-with-rtsopts=-N"
