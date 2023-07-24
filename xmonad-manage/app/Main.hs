@@ -85,15 +85,15 @@ manageOpts =
           Opts.info (pure ViewStartLog) $
             Opts.progDesc "View log output from running the xmonad-manage on login."
       ]
- where
-  version = "xmonad-manage " <> VERSION_xmonad_manage
-  pathArg name = Opts.strArgument $ Opts.metavar name <> Opts.action "directory"
-  profIdArg = Opts.argument (Opts.str >>= makeIDM) $ Opts.metavar "<profile-id>"
-  installCond =
-    Opts.flag WhenAbsent AlwaysInstall $
-      Opts.long "always-install"
-        <> Opts.short 'a'
-        <> Opts.help "Run package installation regardless of whether it was installed or not."
+  where
+    version = "xmonad-manage " <> VERSION_xmonad_manage
+    pathArg name = Opts.strArgument $ Opts.metavar name <> Opts.action "directory"
+    profIdArg = Opts.argument (Opts.str >>= makeIDM) $ Opts.metavar "<profile-id>"
+    installCond =
+      Opts.flag WhenAbsent AlwaysInstall $
+        Opts.long "always-install"
+          <> Opts.short 'a'
+          <> Opts.help "Run package installation regardless of whether it was installed or not."
 
 -- | The manager program. Current directory needs to be the profile main directory.
 main :: IO ()
@@ -101,19 +101,19 @@ main = (`catch` handleError) $ do
   hSetBuffering stdout LineBuffering -- For consistent line buffering
   mEnv <- makeManageEnv
   Opts.customExecParser optPrefs manageOpts >>= handleOption mEnv
- where
-  handleError = \case
-    ProfileNotFound profID -> do
-      hPrintf stderr "Error: Profile %s not found\n" (idStr profID)
-      exitWith (ExitFailure 1)
-    ProfileIOError profPath err -> do
-      hPrintf stderr "Error: IO Exception while loading profile on path %s\n" profPath
-      hPrintf stderr "Details: %s\n" (show err)
-      exitWith (ExitFailure 2)
-    ProfileWrongFormat details -> do
-      hPrintf stderr "Error: Profile cannot be read from profile.cfg\n"
-      hPrintf stderr "Details: %s\n" details
-      exitWith (ExitFailure 3)
+  where
+    handleError = \case
+      ProfileNotFound profID -> do
+        hPrintf stderr "Error: Profile %s not found\n" (idStr profID)
+        exitWith (ExitFailure 1)
+      ProfileIOError profPath err -> do
+        hPrintf stderr "Error: IO Exception while loading profile on path %s\n" profPath
+        hPrintf stderr "Details: %s\n" (show err)
+        exitWith (ExitFailure 2)
+      ProfileWrongFormat details -> do
+        hPrintf stderr "Error: Profile cannot be read from profile.cfg\n"
+        hPrintf stderr "Details: %s\n" details
+        exitWith (ExitFailure 3)
 
 handleOption :: ManageEnv -> Action -> IO ()
 handleOption mEnv@ManageEnv{home} = \case
@@ -190,56 +190,56 @@ handleOption mEnv@ManageEnv{home} = \case
     putStrLn ""
     putStrLn "Error:"
     putStrLn =<< readFile (logDir </> "start.err")
- where
-  withProfPath profID act = do
-    ips <- get (savedVar @InstalledProfiles)
-    case getProfilePath profID ips of
-      Nothing -> throwIO (ProfileNotFound profID)
-      Just profilePath -> act profilePath
+  where
+    withProfPath profID act = do
+      ips <- get (savedVar @InstalledProfiles)
+      case getProfilePath profID ips of
+        Nothing -> throwIO (ProfileNotFound profID)
+        Just profilePath -> act profilePath
 
-  printActive :: ModuleSet (Component ModuleMode) -> IO ()
-  printActive modules = do
-    for_ [minBound .. maxBound] $ \typ -> do
-      case modules.typedModules M.!? typ of
-        Just mod -> printf "%s: %s\n" (show typ) (show mod.identifier)
-        Nothing -> printf "%s: None\n" (show typ)
-    printf "Others: %s\n" $ show $ (\mod -> mod.identifier) <$> modules.otherModules
+    printActive :: ModuleSet (Component ModuleMode) -> IO ()
+    printActive modules = do
+      for_ [minBound .. maxBound] $ \typ -> do
+        case modules.typedModules M.!? typ of
+          Just mod -> printf "%s: %s\n" (show typ) (show mod.identifier)
+          Nothing -> printf "%s: None\n" (show typ)
+      printf "Others: %s\n" $ show $ (\mod -> mod.identifier) <$> modules.otherModules
 
-  -- Send current environment to the service file.
-  sendEnvToService :: IO ()
-  sendEnvToService = do
-    putStrLn "Sending environments to systemd..."
-    getEnvironment >>= traverse_ (\(k, v) -> setServiceEnv k (T.pack v))
+    -- Send current environment to the service file.
+    sendEnvToService :: IO ()
+    sendEnvToService = do
+      putStrLn "Sending environments to systemd..."
+      getEnvironment >>= traverse_ (\(k, v) -> setServiceEnv k (T.pack v))
 
-  updatePATH :: FilePath -> IO ()
-  updatePATH home = do
-    path <- getEnv "PATH"
-    -- Blame ghcup for not putting environment inside .profile, duh
-    let newPath =
-          intercalate
-            ":"
-            [ home </> ".cabal" </> "bin"
-            , home </> ".ghcup" </> "bin"
-            , path
-            ]
-    printf "Updating path to \"%s\"...\n" newPath
-    setEnv "PATH" newPath
-    setServiceEnv "PATH" (T.pack newPath)
+    updatePATH :: FilePath -> IO ()
+    updatePATH home = do
+      path <- getEnv "PATH"
+      -- Blame ghcup for not putting environment inside .profile, duh
+      let newPath =
+            intercalate
+              ":"
+              [ home </> ".cabal" </> "bin"
+              , home </> ".ghcup" </> "bin"
+              , path
+              ]
+      printf "Updating path to \"%s\"...\n" newPath
+      setEnv "PATH" newPath
+      setServiceEnv "PATH" (T.pack newPath)
 
-  redirectLogs :: IO ()
-  redirectLogs = do
-    logDir <- getXdgDirectory XdgState "xmonad-manage"
-    -- Redirect stdout/stderr elsewhere; lightdm is being goofy about it..
-    -- You need to look into ~/.xsession-errors if something happens beforehand.
-    createDirectoryIfMissing True logDir
-    handleOut <- openFile (logDir </> "start.out") WriteMode
-    handleErr <- openFile (logDir </> "start.err") WriteMode
+    redirectLogs :: IO ()
+    redirectLogs = do
+      logDir <- getXdgDirectory XdgState "xmonad-manage"
+      -- Redirect stdout/stderr elsewhere; lightdm is being goofy about it..
+      -- You need to look into ~/.xsession-errors if something happens beforehand.
+      createDirectoryIfMissing True logDir
+      handleOut <- openFile (logDir </> "start.out") WriteMode
+      handleErr <- openFile (logDir </> "start.err") WriteMode
 
-    hDuplicateTo handleOut stdout
-    hDuplicateTo handleErr stderr
-    hClose handleOut
-    hClose handleErr
+      hDuplicateTo handleOut stdout
+      hDuplicateTo handleErr stderr
+      hClose handleOut
+      hClose handleErr
 
-    hSetBuffering stdout LineBuffering
-    hSetBuffering stderr LineBuffering
-    putStrLn "> Log redirected. <"
+      hSetBuffering stdout LineBuffering
+      hSetBuffering stderr LineBuffering
+      putStrLn "> Log redirected. <"

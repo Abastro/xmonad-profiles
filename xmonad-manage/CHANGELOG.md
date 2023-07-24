@@ -13,6 +13,7 @@
     Note that the cache contains the built executables from the profile.
 - Logging has been improved a bit.
   - Now profile logs show ID at its heading.
+- On startup, environments are reflected into systemd user environment.
 
 ## 0.7.3
 - Removed update command, please use `./install.sh` instead.
