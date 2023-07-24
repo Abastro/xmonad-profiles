@@ -6,12 +6,13 @@ module X11 (
 import Common
 import Component
 import Control.Concurrent
+import Control.Exception
 import Data.Text qualified as T
 import Data.Text.IO qualified as T
 import Data.YAML
 import Manages
-import References
 import Packages
+import References
 import System.FilePath
 import System.Process
 import Text.Printf
@@ -24,7 +25,14 @@ data DisplayConfig = DisplayConfig
   }
   deriving (Show)
 
--- TODO What if the configuration file is missing?
+defaultConfig =
+  DisplayConfig
+    { scalingFactor = 1
+    , theme = T.pack "Adwaita-dark"
+    , iconTheme = T.pack "Adwaita"
+    , cursorTheme = T.pack "DMZ-White"
+    }
+
 instance FromYAML DisplayConfig where
   parseYAML :: Node Pos -> Parser DisplayConfig
   parseYAML = withMap "display-config" $ \m ->
@@ -35,7 +43,13 @@ instance FromYAML DisplayConfig where
       <*> (m .: "Cursor-Theme")
 
 loadDisplayCfg :: ManageEnv -> IO DisplayConfig
-loadDisplayCfg mEnv = readYAMLFile userError (mEnv.configUserDir </> "display-config.yaml")
+loadDisplayCfg mEnv = handle onExc $ readYAMLFile userError (mEnv.configUserDir </> "display-config.yaml")
+  where
+    onExc (err :: IOException) = do
+      printf "[X11] IO exception while trying to load display configuration:\n"
+      print err
+      printf "[X11] Using the default config..."
+      pure defaultConfig
 
 data SettingsValue = SetFlag !Bool | SetInt !Int | SetText !T.Text
 

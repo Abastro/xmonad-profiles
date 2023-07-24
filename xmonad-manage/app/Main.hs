@@ -40,9 +40,6 @@ import X11
 
 -- ? Give choice for profile to keep separate directory for cabal installations. (CABAL_DIR)
 
--- TODO Later:
--- TODO Display Configuration
-
 data Action
   = ResetSave
   | Setup InstallCond
