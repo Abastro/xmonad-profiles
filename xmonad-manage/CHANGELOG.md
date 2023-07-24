@@ -15,6 +15,7 @@
 - Logging has been improved a bit.
   - Now profile logs show ID at its heading.
 - On startup, environments are reflected into systemd user environment.
+- New command verb `log-output`: View log output from running `xmonad-manage run` on login.
 
 ## 0.7.3
 - Removed update command, please use `./install.sh` instead.
