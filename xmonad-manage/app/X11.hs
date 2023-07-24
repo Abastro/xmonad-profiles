@@ -5,13 +5,13 @@ module X11 (
 
 import Common
 import Component
+import Control.Concurrent
 import Data.Text qualified as T
 import Data.Text.IO qualified as T
 import Data.YAML
 import Manages
-import Modules
+import References
 import Packages
-import System.Directory
 import System.FilePath
 import System.Process
 import Text.Printf
@@ -84,7 +84,7 @@ xsettingsText cfg = T.unlines $ do
       SetInt i -> T.pack (show i)
       SetText txt -> "\"" <> txt <> "\""
 
-data ThisEnv = ThisEnv !FilePath !DisplayConfig !FilePath
+data ThisEnv = ThisEnv !FilePath !DisplayConfig
 
 x11Module :: ComponentCat ModuleMode ManageEnv ()
 x11Module = withIdentifier (UnsafeMakeID "x11") $ xmonadDeps <> (getConfig >>> xresources <> xsettingsd) <> xsetup
@@ -103,8 +103,7 @@ x11Module = withIdentifier (UnsafeMakeID "x11") $ xmonadDeps <> (getConfig >>> x
         , identifier = UnsafeMakeID "xsetup"
         , handle = const handleXSetup
         }
-    getConfig = ofAction $ \mEnv -> do
-      ThisEnv mEnv.home <$> loadDisplayCfg mEnv <*> getXdgDirectory XdgConfig "xsettingsd"
+    getConfig = ofAction $ \mEnv -> ThisEnv mEnv.home <$> loadDisplayCfg mEnv
 
 handleXSetup :: Context ModuleMode -> IO ()
 handleXSetup = \case
@@ -114,7 +113,7 @@ handleXSetup = \case
   _ -> pure ()
 
 handleXresources :: ThisEnv -> Context ModuleMode -> IO ()
-handleXresources (ThisEnv home displayCfg _) = \case
+handleXresources (ThisEnv home displayCfg) = \case
   Custom Install -> do
     printf "[X11] Installing X-resources...\n"
     T.writeFile xresourcesPath $ xresourcesText (xresourcesCfg displayCfg)
@@ -127,20 +126,25 @@ handleXresources (ThisEnv home displayCfg _) = \case
     xresourcesPath = home </> ".Xresources"
 
 handleXsettings :: ThisEnv -> Context ModuleMode -> IO ()
-handleXsettings (ThisEnv _ displayCfg xsettingsDir) = \case
-  Custom Install -> do
-    printf "[X11] Installing X settings...\n"
-    -- Need to create folder first
-    createDirectoryIfMissing False xsettingsDir
-    T.writeFile (xsettingsDir </> "xsettingsd.conf") $ xsettingsText (xsettingsConf displayCfg)
-  --
-  Custom Remove -> do
-    printf "You may remove installed xsettingsd config at %s.\n" (xsettingsDir </> "xsettingsd.conf")
+handleXsettings (ThisEnv _ displayCfg) = \case
+  Custom _ -> pure () -- Does not write config now.
   --
   InvokeOn Start -> do
-    printf "[X11] Running XSettingsd for X settings.\n"
-    _ <- spawnProcess "xsettingsd" []
+    printf "[X11] Running Xsettingsd for X settings.\n"
+    forkIO $ xsettingsSender displayCfg
+    -- Workaround for GTK4 apps reaching for GTK_THEME. Meh.
     setServiceEnv "GTK_THEME" displayCfg.theme
-    -- Workaround for GTK4 apps reaching for GTK_THEME.
     setServiceEnv "QT_AUTO_SCREEN_SCALE_FACTOR" "1" -- HiDPI Scales for QT
     setServiceEnv "QT_QPA_PLATFORMTHEME" "qt5ct"
+
+-- ? Note that sending SIGHUP to xsettingsd will cause to refresh configuration.
+-- ? This could be used for configuration updates.
+
+-- | The thread which "sends" configuration to xsettingsd.
+-- This needs to be alive somehow, soo.. :shrug:
+xsettingsSender :: DisplayConfig -> IO ()
+xsettingsSender displayConfig = withTemporaryDirectory $ \tmpDir -> do
+  let xsettingsdConfig = tmpDir </> "xsettingsd.conf"
+  T.writeFile xsettingsdConfig $ xsettingsText (xsettingsConf displayConfig)
+  -- Need to be checked if this correctly hangs for us
+  callProcess "xsettingsd" ["-c", xsettingsdConfig]
