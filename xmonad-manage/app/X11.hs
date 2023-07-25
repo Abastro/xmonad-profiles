@@ -109,8 +109,10 @@ xsettingsText cfg = T.unlines $ do
       SetInt i -> T.pack (show i)
       SetText txt -> "\"" <> txt <> "\""
 
+data X11Env = X11Env !FilePath !DisplayConfig
+
 x11Module :: ComponentCat ModuleMode ManageEnv ()
-x11Module = withIdentifier (UnsafeMakeID "x11") $ xmonadDeps <> (getConfig >>> xresources <> xsettingsd) <> xsetup
+x11Module = withIdentifier (UnsafeMakeID "x11") $ xmonadDeps <> (getEnv >>> xresources <> xsettingsd) <> xsetup
   where
     xmonadDeps = ofDependencies [AsPackage "libxss", AsPackage "xmonad"]
     xresources = withIdentifier (UnsafeMakeID "xresources") $ ofHandle handleXresources
@@ -126,7 +128,7 @@ x11Module = withIdentifier (UnsafeMakeID "x11") $ xmonadDeps <> (getConfig >>> x
         , identifier = UnsafeMakeID "xsetup"
         , handle = const handleXSetup
         }
-    getConfig = ofAction loadDisplayCfg
+    getEnv = ofAction $ \mEnv -> X11Env mEnv.temporaryDir <$> loadDisplayCfg mEnv
 
 handleXSetup :: Context ModuleMode -> IO ()
 handleXSetup = \case
@@ -135,36 +137,29 @@ handleXSetup = \case
     callProcess "xsetroot" ["-cursor_name", "left_ptr"]
   _ -> pure ()
 
-handleXresources :: DisplayConfig -> Context ModuleMode -> IO ()
-handleXresources displayConfig = \case
+handleXresources :: X11Env -> Context ModuleMode -> IO ()
+handleXresources (X11Env temporaryDir displayConfig) = \case
   Custom _ -> pure ()
   InvokeOn Start -> do
     printf "[X11] Reflect X-resources.\n"
-    withTemporaryDirectory $ \tmpDir -> do
-      let xresourcesPath = tmpDir </> ".Xresources"
-      T.writeFile xresourcesPath $ xresourcesText (xresourcesCfg displayConfig)
-      callProcess "xrdb" ["-merge", xresourcesPath]
-
-handleXsettings :: DisplayConfig -> Context ModuleMode -> IO ()
-handleXsettings displayConfig = \case
-  Custom _ -> pure () -- Does not write config now.
-  --
-  InvokeOn Start -> do
-    printf "[X11] Running Xsettingsd for X settings.\n"
-    forkIO $ xsettingsSender displayConfig
-    -- Workaround for GTK4 apps reaching for GTK_THEME. Meh.
-    setServiceEnv "GTK_THEME" displayConfig.theme
-    setServiceEnv "QT_AUTO_SCREEN_SCALE_FACTOR" "1" -- HiDPI Scales for QT
-    setServiceEnv "QT_QPA_PLATFORMTHEME" "qt5ct"
+    let xresourcesPath = temporaryDir </> ".Xresources"
+    T.writeFile xresourcesPath $ xresourcesText (xresourcesCfg displayConfig)
+    callProcess "xrdb" ["-merge", xresourcesPath]
 
 -- ? Note that sending SIGHUP to xsettingsd will cause to refresh configuration.
 -- ? This could be used for configuration updates.
 
--- | The thread which "sends" configuration to xsettingsd.
--- This needs to be alive somehow, soo.. :shrug:
-xsettingsSender :: DisplayConfig -> IO ()
-xsettingsSender displayConfig = withTemporaryDirectory $ \tmpDir -> do
-  let xsettingsdConfig = tmpDir </> "xsettingsd.conf"
-  T.writeFile xsettingsdConfig $ xsettingsText (xsettingsConf displayConfig)
-  -- Need to be checked if this correctly hangs for us
-  callProcess "xsettingsd" ["-c", xsettingsdConfig]
+handleXsettings :: X11Env -> Context ModuleMode -> IO ()
+handleXsettings (X11Env temporaryDir displayConfig) = \case
+  Custom _ -> pure () -- Does not write config now.
+  --
+  InvokeOn Start -> do
+    printf "[X11] Running Xsettingsd for X settings.\n"
+    forkIO $ do
+      let xsettingsdConfig = temporaryDir </> "xsettingsd.conf"
+      T.writeFile xsettingsdConfig $ xsettingsText (xsettingsConf displayConfig)
+      callProcess "xsettingsd" ["-c", xsettingsdConfig]
+    -- Workaround for GTK4 apps reaching for GTK_THEME. Meh.
+    setServiceEnv "GTK_THEME" displayConfig.theme
+    setServiceEnv "QT_AUTO_SCREEN_SCALE_FACTOR" "1" -- HiDPI Scales for QT
+    setServiceEnv "QT_QPA_PLATFORMTHEME" "qt5ct"
