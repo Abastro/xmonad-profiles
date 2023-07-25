@@ -174,7 +174,7 @@ moduleForSpec moduleDir spec =
     mconcat
       [ ofDependencies spec.dependencies
       , ofHandle (setupEnvironment logger spec)
-      , scripts >>> traversing_ (ofHandle $ executeScript logger)
+      , scriptWithEnv >>> traversing_ (ofHandle $ executeScript logger)
       ]
   where
     logger = moduleLog spec.name
@@ -183,17 +183,19 @@ moduleForSpec moduleDir spec =
       Custom Remove -> Nothing
       InvokeOn Start -> Just (scriptFor spec.run)
 
+    scriptWithEnv = (\mEnv mayPath -> (mEnv,) <$> mayPath) <$> id <*> scripts
     scriptFor path = moduleDir </> path
 
-executeScript :: (ModuleLog -> IO ()) -> FilePath -> Context ModuleMode -> IO ()
-executeScript logger script = \case
+executeScript :: (ModuleLog -> IO ()) -> (ManageEnv, FilePath) -> Context ModuleMode -> IO ()
+executeScript logger (mEnv, script) = \case
   Custom Install -> do
     logger $ ModuleScriptPhase (Custom Install) Pre script
     callProcess script []
   Custom Remove -> pure ()
   InvokeOn Start -> do
     logger $ ModuleScriptPhase (InvokeOn Start) Pre script
-    callProcess script []
+    -- Feeds the temporary directory
+    callProcess script [mEnv.temporaryDir]
     logger $ ModuleScriptPhase (InvokeOn Start) Post script
 
 setupEnvironment :: (ModuleLog -> IO ()) -> ModuleSpec -> ManageEnv -> Context ModuleMode -> IO ()
