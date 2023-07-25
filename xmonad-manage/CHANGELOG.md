@@ -4,6 +4,8 @@
 - Display configuration is applied on login, instead of on each setup.
   - For `xsettingsd`, uses a temporary file instead of directly writing to its configuration.
   - Also uses temporary file for `.Xresources`.
+- New display configurations.
+  - `Font` decides the font used in UI.
 
 ## 0.8.0
 - **! Required to run both `xmonad-manage setup` and re-installing your profile !**

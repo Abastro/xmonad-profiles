@@ -24,6 +24,7 @@ data DisplayConfig = DisplayConfig
   , theme :: !T.Text
   , iconTheme :: !T.Text
   , cursorTheme :: !T.Text
+  , font :: !(Maybe T.Text)
   }
   deriving (Show)
 
@@ -33,6 +34,7 @@ defaultConfig =
     , theme = T.pack "Adwaita-dark"
     , iconTheme = T.pack "Adwaita"
     , cursorTheme = T.pack "DMZ-White"
+    , font = Nothing
     }
 
 instance FromYAML DisplayConfig where
@@ -43,6 +45,7 @@ instance FromYAML DisplayConfig where
       <*> (m .: "Theme")
       <*> (m .: "Icon-Theme")
       <*> (m .: "Cursor-Theme")
+      <*> (m .: "Font")
 
 loadDisplayCfg :: ManageEnv -> IO DisplayConfig
 loadDisplayCfg mEnv = handle onExc $ readYAMLFile userError (mEnv.configUserDir </> "display-config.yaml")
@@ -90,6 +93,12 @@ xsettingsConf DisplayConfig{..} =
   , ("Net/IconThemeName", SetText iconTheme)
   , ("Gtk/CursorThemeName", SetText cursorTheme)
   ]
+    <> fontProp
+  where
+    fontProp = case font of
+      Just x -> [("Gtk/FontName", SetText x)]
+      Nothing -> []
+
 xsettingsText :: [(T.Text, SettingsValue)] -> T.Text
 xsettingsText cfg = T.unlines $ do
   (field, value) <- cfg
