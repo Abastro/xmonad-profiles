@@ -17,7 +17,7 @@ import System.FilePath
 import System.Process
 import Text.Printf
 
--- ? Make this a separate module?
+-- ? Make this a separate module for managing settings?
 
 data DisplayConfig = DisplayConfig
   { scalingFactor :: !Int
