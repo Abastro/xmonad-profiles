@@ -2,7 +2,8 @@
 ## master (0.8.1)
 - Now, `xmonad-manage` detect presence of library packages and avoid re-installing them.
 - Display configuration is applied on login, instead of on each setup.
-  - Now it uses a temporary file to feed `xsettingsd`, instead of directly writing to its configuration.
+  - For `xsettingsd`, uses a temporary file instead of directly writing to its configuration.
+  - Also uses temporary file for `.Xresources`.
 
 ## 0.8.0
 - **! Required to run both `xmonad-manage setup` and re-installing your profile !**

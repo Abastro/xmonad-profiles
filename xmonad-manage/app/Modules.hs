@@ -27,6 +27,7 @@ import System.FilePath
 import System.Posix hiding (Start)
 import System.Process
 import Text.Printf
+import X11
 
 data ModuleType = Compositor | Display | Input | PolicyKit | Keyring
   deriving (Show, Eq, Ord, Enum, Bounded, Generic)
@@ -89,9 +90,9 @@ canonPath mEnv = \case
   BuiltIn ident -> mEnv.moduleDir </> ident
   External path -> path
 
--- | Takes X11 module as a parameter, and combines it with rest of modules.
-combineWithBuiltins :: Component ModuleMode -> ModuleSet (Component ModuleMode) -> Component ModuleMode
-combineWithBuiltins x11Module moduleSet =
+-- | Combines built-in modules with the rest of modules.
+combineWithBuiltins :: ModuleSet (Component ModuleMode) -> Component ModuleMode
+combineWithBuiltins moduleSet =
   withIdentifier (UnsafeMakeID "combined") . withHandleWrap owning $
     x11Module <> fold moduleSet
   where

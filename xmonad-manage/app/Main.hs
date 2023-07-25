@@ -26,7 +26,6 @@ import System.Exit
 import System.FilePath
 import System.IO
 import Text.Printf
-import X11
 
 -- ? Consider: do not install system packages, and instead check for existence of packages?
 -- ? Long-term: Add proxy for package removal.
@@ -129,9 +128,8 @@ handleOption mEnv@ManageEnv{home} = \case
     putStrLn "Proceed? (Ctrl+C to cancel)"
     _ <- getLine
 
-    let combined = combineWithBuiltins x11Module actives
     pkgData <- loadPackageData mEnv
-    install mEnv pkgData installCond combined
+    install mEnv pkgData installCond (combineWithBuiltins actives)
 
   -- Lists installed profiles
   ListProf -> do
@@ -176,7 +174,7 @@ handleOption mEnv@ManageEnv{home} = \case
     updatePATH home -- PATH needs updating
     withCurrentDirectory home $ do
       actives <- activeModules mEnv
-      invoke mEnv Start (combineWithBuiltins x11Module actives)
+      invoke mEnv Start (combineWithBuiltins actives)
 
       putStrLn "Booting xmonad..."
       invoke mEnv RunMode =<< loadProfile cfgPath

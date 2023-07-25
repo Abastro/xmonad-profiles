@@ -17,6 +17,8 @@ import System.FilePath
 import System.Process
 import Text.Printf
 
+-- ? Make this a separate module?
+
 data DisplayConfig = DisplayConfig
   { scalingFactor :: !Int
   , theme :: !T.Text
@@ -98,8 +100,6 @@ xsettingsText cfg = T.unlines $ do
       SetInt i -> T.pack (show i)
       SetText txt -> "\"" <> txt <> "\""
 
-data ThisEnv = ThisEnv !FilePath !DisplayConfig
-
 x11Module :: ComponentCat ModuleMode ManageEnv ()
 x11Module = withIdentifier (UnsafeMakeID "x11") $ xmonadDeps <> (getConfig >>> xresources <> xsettingsd) <> xsetup
   where
@@ -117,7 +117,7 @@ x11Module = withIdentifier (UnsafeMakeID "x11") $ xmonadDeps <> (getConfig >>> x
         , identifier = UnsafeMakeID "xsetup"
         , handle = const handleXSetup
         }
-    getConfig = ofAction $ \mEnv -> ThisEnv mEnv.home <$> loadDisplayCfg mEnv
+    getConfig = ofAction loadDisplayCfg
 
 handleXSetup :: Context ModuleMode -> IO ()
 handleXSetup = \case
@@ -126,25 +126,25 @@ handleXSetup = \case
     callProcess "xsetroot" ["-cursor_name", "left_ptr"]
   _ -> pure ()
 
-handleXresources :: ThisEnv -> Context ModuleMode -> IO ()
-handleXresources (ThisEnv _ displayCfg) = \case
+handleXresources :: DisplayConfig -> Context ModuleMode -> IO ()
+handleXresources displayConfig = \case
   Custom _ -> pure ()
   InvokeOn Start -> do
     printf "[X11] Reflect X-resources.\n"
     withTemporaryDirectory $ \tmpDir -> do
       let xresourcesPath = tmpDir </> ".Xresources"
-      T.writeFile xresourcesPath $ xresourcesText (xresourcesCfg displayCfg)
+      T.writeFile xresourcesPath $ xresourcesText (xresourcesCfg displayConfig)
       callProcess "xrdb" ["-merge", xresourcesPath]
 
-handleXsettings :: ThisEnv -> Context ModuleMode -> IO ()
-handleXsettings (ThisEnv _ displayCfg) = \case
+handleXsettings :: DisplayConfig -> Context ModuleMode -> IO ()
+handleXsettings displayConfig = \case
   Custom _ -> pure () -- Does not write config now.
   --
   InvokeOn Start -> do
     printf "[X11] Running Xsettingsd for X settings.\n"
-    forkIO $ xsettingsSender displayCfg
+    forkIO $ xsettingsSender displayConfig
     -- Workaround for GTK4 apps reaching for GTK_THEME. Meh.
-    setServiceEnv "GTK_THEME" displayCfg.theme
+    setServiceEnv "GTK_THEME" displayConfig.theme
     setServiceEnv "QT_AUTO_SCREEN_SCALE_FACTOR" "1" -- HiDPI Scales for QT
     setServiceEnv "QT_QPA_PLATFORMTHEME" "qt5ct"
 
