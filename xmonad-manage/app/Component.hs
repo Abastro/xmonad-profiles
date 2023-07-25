@@ -18,7 +18,6 @@ module Component (
 ) where
 
 import Common
-import Control.Applicative
 import Data.Foldable
 import Data.Maybe
 import Manages
@@ -42,7 +41,9 @@ data ComponentCat mode env a = MkComponent
   { dependencies :: ![Package]
   , identifier :: !ID
   , handle :: env -> Context mode -> IO a
-  }
+  } deriving (Functor)
+
+-- ID is a blocker for genericaly deriving now..
 
 type Component mode = ComponentCat mode ManageEnv ()
 
@@ -57,9 +58,6 @@ instance (Monoid a) => Monoid (ComponentCat mode r a) where
   mempty :: (Monoid a) => ComponentCat mode r a
   mempty = MkComponent mempty (UnsafeMakeID "") mempty
 
-instance Functor (ComponentCat mode r) where
-  fmap :: (a -> b) -> ComponentCat mode r a -> ComponentCat mode r b
-  fmap = liftA
 instance Applicative (ComponentCat mode r) where
   pure :: a -> ComponentCat mode r a
   pure ret = MkComponent [] (UnsafeMakeID "pure") (\_ _ -> pure ret)
