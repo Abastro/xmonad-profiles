@@ -3,7 +3,7 @@ module Manages (
   savedVar,
   restore,
   ManageEnv (..),
-  makeManageEnv,
+  withManageEnv,
 )
 where
 
@@ -50,13 +50,15 @@ data ManageEnv = ManageEnv
   { home :: !FilePath
   , configSharedDir, configUserDir :: !FilePath
   , moduleDir, databaseDir :: !FilePath
+  , temporaryDir :: !FilePath
   }
 
-makeManageEnv :: IO ManageEnv
-makeManageEnv = do
+withManageEnv :: (ManageEnv -> IO ()) -> IO ()
+withManageEnv act = do
   home <- getHomeDirectory
   let configSharedDir = localDirectory FHSConfig </> "xmonad-manage"
       moduleDir = localDirectory FHSShare </> "xmonad-manage" </> "modules"
       databaseDir = localDirectory FHSShare </> "xmonad-manage" </> "database"
   configUserDir <- getXdgDirectory XdgConfig "xmonad-manage"
-  pure ManageEnv{..}
+  withTemporaryDirectory $ \temporaryDir ->
+    act ManageEnv{..}

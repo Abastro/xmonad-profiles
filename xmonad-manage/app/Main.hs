@@ -95,8 +95,8 @@ manageOpts =
 main :: IO ()
 main = (`catch` handleError) $ do
   hSetBuffering stdout LineBuffering -- For consistent line buffering
-  mEnv <- makeManageEnv
-  Opts.customExecParser optPrefs manageOpts >>= handleOption mEnv
+  withManageEnv $ \mEnv -> do
+    Opts.customExecParser optPrefs manageOpts >>= handleOption mEnv
   where
     handleError = \case
       ProfileNotFound profID -> do
