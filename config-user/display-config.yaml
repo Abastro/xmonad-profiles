@@ -9,3 +9,7 @@ Theme: "Adwaita-dark"
 Icon-Theme: "Adwaita"
 Cursor-Theme: "DMZ-White"
 # Font:
+
+# Windowing effects
+Corner-Radius: 10
+Fading: true

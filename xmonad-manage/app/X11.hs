@@ -25,6 +25,8 @@ data DisplayConfig = DisplayConfig
   , iconTheme :: !T.Text
   , cursorTheme :: !T.Text
   , font :: !(Maybe T.Text)
+  , cornerRadius :: !(Maybe Int)
+  , fading :: !(Maybe Bool)
   }
   deriving (Show)
 
@@ -35,6 +37,8 @@ defaultConfig =
     , iconTheme = T.pack "Adwaita"
     , cursorTheme = T.pack "DMZ-White"
     , font = Nothing
+    , cornerRadius = Nothing
+    , fading = Nothing
     }
 
 instance FromYAML DisplayConfig where
@@ -46,6 +50,8 @@ instance FromYAML DisplayConfig where
       <*> (m .: "Icon-Theme")
       <*> (m .: "Cursor-Theme")
       <*> (m .: "Font")
+      <*> (m .: "Corner-Radius")
+      <*> (m .: "Fading")
 
 loadDisplayCfg :: ManageEnv -> IO DisplayConfig
 loadDisplayCfg mEnv = handle onExc $ readYAMLFile userError (mEnv.configUserDir </> "display-config.yaml")
@@ -56,7 +62,7 @@ loadDisplayCfg mEnv = handle onExc $ readYAMLFile userError (mEnv.configUserDir 
       printf "[X11] Using the default config..."
       pure defaultConfig
 
-data SettingsValue = SetFlag !Bool | SetInt !Int | SetText !T.Text
+data SettingsValue = SetFlag !Bool | SetInt !Int | SetText !T.Text | SetFloat !Float | SetTextList [T.Text]
 
 xresourcesCfg :: DisplayConfig -> [(T.Text, SettingsValue)]
 xresourcesCfg DisplayConfig{..} =
@@ -77,6 +83,8 @@ xresourcesText cfg = T.unlines $ do
       SetFlag flag -> if flag then "true" else "false"
       SetInt i -> T.pack (show i)
       SetText txt -> txt -- .Xresources does not require quote here
+      SetFloat _ -> error "unsupported"
+      SetTextList _ -> error "unsupported"
 
 xsettingsConf :: DisplayConfig -> [(T.Text, SettingsValue)]
 xsettingsConf DisplayConfig{..} =
@@ -108,6 +116,8 @@ xsettingsText cfg = T.unlines $ do
       SetFlag flag -> T.pack (show $ fromEnum flag)
       SetInt i -> T.pack (show i)
       SetText txt -> "\"" <> txt <> "\""
+      SetFloat _ -> error "unsupported"
+      SetTextList _ -> error "unsupported"
 
 data X11Env = X11Env !FilePath !DisplayConfig
 
@@ -163,3 +173,24 @@ handleXsettings (X11Env temporaryDir displayConfig) = \case
     setServiceEnv "GTK_THEME" displayConfig.theme
     setServiceEnv "QT_AUTO_SCREEN_SCALE_FACTOR" "1" -- HiDPI Scales for QT
     setServiceEnv "QT_QPA_PLATFORMTHEME" "qt5ct"
+
+picomConfig :: DisplayConfig -> [(T.Text, SettingsValue)]
+picomConfig DisplayConfig{..} =
+  [ ("shadow", SetFlag True)
+  , ("shadow-exclude", SetTextList undefined)
+  , ("detect-rounded-corners", SetFlag undefined)
+  , ("frame-opacity", SetFloat 0.8)
+  , ("fading", SetFlag undefined)
+  , ("fade-in-step", SetFloat 0.02)
+  , ("fade-out-step", SetFloat 0.02)
+  , ("fade-delta", SetInt 4)
+  ]
+
+feedPicomSettings :: X11Env -> Context ModuleMode -> IO ()
+feedPicomSettings (X11Env temporaryDir displayConfig) = \case
+  Custom _ -> pure ()
+  InvokeOn Start -> do
+    printf "[X11] Writing picom settings in case picom would use it...\n"
+    let picomCfgPath = temporaryDir </> "picom.conf"
+    let x = picomConfig displayConfig
+    undefined
