@@ -51,10 +51,10 @@ instance FromYAML DisplayConfig where
       <*> (m .: "Theme")
       <*> (m .: "Icon-Theme")
       <*> (m .: "Cursor-Theme")
-      <*> (m .: "Font")
-      <*> (m .: "Corner-Radius" .!= 0)
-      <*> (m .: "Shadow" .!= True)
-      <*> (m .: "Fading" .!= True)
+      <*> (m .:? "Font")
+      <*> (m .:? "Corner-Radius" .!= 0)
+      <*> (m .:? "Shadow" .!= True)
+      <*> (m .:? "Fading" .!= True)
 
 loadDisplayCfg :: ManageEnv -> IO DisplayConfig
 loadDisplayCfg mEnv = handle onExc $ readYAMLFile userError (mEnv.configUserDir </> "display-config.yaml")
