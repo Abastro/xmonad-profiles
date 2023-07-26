@@ -54,7 +54,7 @@ instance FromYAML DisplayConfig where
       <*> (m .:? "Font")
       <*> (m .:? "Corner-Radius" .!= 0)
       <*> (m .:? "Shadow" .!= True)
-      <*> (m .:? "Fading" .!= True)
+      <*> (m .:? "Fading" .!= False)
 
 loadDisplayCfg :: ManageEnv -> IO DisplayConfig
 loadDisplayCfg mEnv = handle onExc $ readYAMLFile userError (mEnv.configUserDir </> "display-config.yaml")
