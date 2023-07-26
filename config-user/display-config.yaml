@@ -11,5 +11,6 @@ Cursor-Theme: "DMZ-White"
 # Font:
 
 # Windowing effects
-Corner-Radius: 10
+Corner-Radius: 0 # 0 means radius disabled
+Shadow: true
 Fading: true

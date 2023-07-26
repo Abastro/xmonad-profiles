@@ -25,8 +25,9 @@ data DisplayConfig = DisplayConfig
   , iconTheme :: !T.Text
   , cursorTheme :: !T.Text
   , font :: !(Maybe T.Text)
-  , cornerRadius :: !(Maybe Int)
-  , fading :: !(Maybe Bool)
+  , cornerRadius :: !Int
+  , shadow :: !Bool
+  , fading :: !Bool
   }
   deriving (Show)
 
@@ -37,8 +38,9 @@ defaultConfig =
     , iconTheme = T.pack "Adwaita"
     , cursorTheme = T.pack "DMZ-White"
     , font = Nothing
-    , cornerRadius = Nothing
-    , fading = Nothing
+    , cornerRadius = 0
+    , shadow = True
+    , fading = True
     }
 
 instance FromYAML DisplayConfig where
@@ -50,8 +52,9 @@ instance FromYAML DisplayConfig where
       <*> (m .: "Icon-Theme")
       <*> (m .: "Cursor-Theme")
       <*> (m .: "Font")
-      <*> (m .: "Corner-Radius")
-      <*> (m .: "Fading")
+      <*> (m .: "Corner-Radius" .!= 0)
+      <*> (m .: "Shadow" .!= True)
+      <*> (m .: "Fading" .!= True)
 
 loadDisplayCfg :: ManageEnv -> IO DisplayConfig
 loadDisplayCfg mEnv = handle onExc $ readYAMLFile userError (mEnv.configUserDir </> "display-config.yaml")
@@ -80,7 +83,7 @@ xresourcesText cfg = T.unlines $ do
   [field <> ": " <> valueAsText value]
   where
     valueAsText = \case
-      SetFlag flag -> if flag then "true" else "false"
+      SetFlag flag -> T.pack (show flag)
       SetInt i -> T.pack (show i)
       SetText txt -> txt -- .Xresources does not require quote here
       SetFloat _ -> error "unsupported"
@@ -89,9 +92,9 @@ xresourcesText cfg = T.unlines $ do
 xsettingsConf :: DisplayConfig -> [(T.Text, SettingsValue)]
 xsettingsConf DisplayConfig{..} =
   [ -- Font rendering
-    ("Xft/Hinting", SetInt 1)
+    ("Xft/Hinting", SetFlag True)
   , ("Xft/HintStyle", SetText "hintslight")
-  , ("Xft/Antialias", SetInt 1)
+  , ("Xft/Antialias", SetFlag True)
   , ("Xft/RGBA", SetText "rgb")
   , -- HiDPI
     ("Gdk/UnscaledDPI", SetInt 98304)
@@ -115,14 +118,18 @@ xsettingsText cfg = T.unlines $ do
     valueAsText = \case
       SetFlag flag -> T.pack (show $ fromEnum flag)
       SetInt i -> T.pack (show i)
-      SetText txt -> "\"" <> txt <> "\""
+      SetText txt -> T.pack (show txt)
       SetFloat _ -> error "unsupported"
       SetTextList _ -> error "unsupported"
 
 data X11Env = X11Env !FilePath !DisplayConfig
 
 x11Module :: ComponentCat ModuleMode ManageEnv ()
-x11Module = withIdentifier (UnsafeMakeID "x11") $ xmonadDeps <> (getEnv >>> xresources <> xsettingsd) <> xsetup
+x11Module =
+  withIdentifier (UnsafeMakeID "x11") $
+    xmonadDeps
+      <> (x11Env >>> xresources <> xsettingsd <> picomSettings)
+      <> xsetup
   where
     xmonadDeps = ofDependencies [AsPackage "libxss", AsPackage "xmonad"]
     xresources = withIdentifier (UnsafeMakeID "xresources") $ ofHandle handleXresources
@@ -132,13 +139,14 @@ x11Module = withIdentifier (UnsafeMakeID "x11") $ xmonadDeps <> (getEnv >>> xres
         , identifier = UnsafeMakeID "xsettings"
         , handle = handleXsettings
         }
+    picomSettings = withIdentifier (UnsafeMakeID "") $ ofHandle feedPicomSettings
     xsetup =
       MkComponent
         { dependencies = [AsPackage "xsetroot"]
         , identifier = UnsafeMakeID "xsetup"
         , handle = const handleXSetup
         }
-    getEnv = ofAction $ \mEnv -> X11Env mEnv.temporaryDir <$> loadDisplayCfg mEnv
+    x11Env = ofAction $ \mEnv -> X11Env mEnv.temporaryDir <$> loadDisplayCfg mEnv
 
 handleXSetup :: Context ModuleMode -> IO ()
 handleXSetup = \case
@@ -177,14 +185,52 @@ handleXsettings (X11Env temporaryDir displayConfig) = \case
 picomConfig :: DisplayConfig -> [(T.Text, SettingsValue)]
 picomConfig DisplayConfig{..} =
   [ ("shadow", SetFlag True)
-  , ("shadow-exclude", SetTextList undefined)
-  , ("detect-rounded-corners", SetFlag undefined)
+  , ("detect-rounded-corners", SetFlag True)
   , ("frame-opacity", SetFloat 0.8)
-  , ("fading", SetFlag undefined)
+  , ("corner-radius", SetInt cornerRadius)
+  , -- Fading settings
+    ("fading", SetFlag fading)
   , ("fade-in-step", SetFloat 0.02)
   , ("fade-out-step", SetFloat 0.02)
   , ("fade-delta", SetInt 4)
   ]
+
+picomWintypes :: DisplayConfig -> [(T.Text, [(T.Text, SettingsValue)])]
+picomWintypes DisplayConfig{..} =
+  [
+    ( "tooltip"
+    ,
+      [ ("fade", SetFlag fading)
+      , ("shadow", SetFlag True)
+      , ("opacity", SetFloat 0.75)
+      , ("full-shadow", SetFlag False)
+      ]
+    )
+  , ("dock", [("shadow", SetFlag False), ("clip-shadow-above", SetFlag True)])
+  , ("dnd", [("shadow", SetFlag False)])
+  , ("popup-menu", [("opacity", SetFloat 0.8)])
+  , ("dropdown-menu", [("opacity", SetFloat 0.8)])
+  ]
+
+picomWholeText :: [(T.Text, SettingsValue)] -> [(T.Text, [(T.Text, SettingsValue)])] -> T.Text
+picomWholeText cfg winTypes = T.unlines [picomText cfg, winTypePart]
+  where
+    winTypePart = T.unlines ["wintypes:", "{", winTypeBody, "};"]
+    winTypeBody = T.unlines $ do
+      (winType, typCfg) <- winTypes
+      [winType <> " = " <> "{" <> picomText typCfg <> "};"]
+
+picomText :: [(T.Text, SettingsValue)] -> T.Text
+picomText cfg = T.unlines $ do
+  (field, value) <- cfg
+  [field <> " = " <> valueAsText value <> ";"]
+  where
+    valueAsText = \case
+      SetFlag f -> T.pack (show f)
+      SetInt i -> T.pack (show i)
+      SetText txt -> T.pack (show txt)
+      SetFloat fl -> T.pack (show fl)
+      SetTextList txtList -> T.pack (show txtList)
 
 feedPicomSettings :: X11Env -> Context ModuleMode -> IO ()
 feedPicomSettings (X11Env temporaryDir displayConfig) = \case
@@ -192,5 +238,4 @@ feedPicomSettings (X11Env temporaryDir displayConfig) = \case
   InvokeOn Start -> do
     printf "[X11] Writing picom settings in case picom would use it...\n"
     let picomCfgPath = temporaryDir </> "picom.conf"
-    let x = picomConfig displayConfig
-    undefined
+    T.writeFile picomCfgPath $ picomWholeText (picomConfig displayConfig) (picomWintypes displayConfig)
