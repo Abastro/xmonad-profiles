@@ -184,7 +184,8 @@ handleXsettings (X11Env temporaryDir displayConfig) = \case
 
 picomConfig :: DisplayConfig -> [(T.Text, SettingsValue)]
 picomConfig DisplayConfig{..} =
-  [ ("shadow", SetFlag True)
+  [ ("backend", SetText "glx") -- xrender backend is way less performant.
+  , ("shadow", SetFlag True)
   , ("detect-rounded-corners", SetFlag True)
   , ("frame-opacity", SetFloat 0.8)
   , ("corner-radius", SetInt cornerRadius)
