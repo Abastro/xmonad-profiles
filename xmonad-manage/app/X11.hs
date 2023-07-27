@@ -193,7 +193,7 @@ picomConfig DisplayConfig{..} =
   , -- Opacity
     ("frame-opacity", SetFloat 0.8)
   , -- Shadow
-    ("shadow", SetFlag True)
+    ("shadow", SetFlag shadow)
   , ("shadow-exclude", SetTextList ["_NET_WM_STATE@:a *= '_NET_WM_STATE_FULLSCREEN'"])
   , ("focus-exclude", SetTextList ["_NET_WM_STATE@:a *= '_NET_WM_STATE_FULLSCREEN'"])
   , -- Corners
