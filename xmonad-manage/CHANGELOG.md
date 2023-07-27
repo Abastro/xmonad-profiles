@@ -6,6 +6,10 @@
   - Also uses temporary file for `.Xresources`.
 - New display configurations.
   - `Font` decides the font used in UI.
+  - Settings for the `picom` module:
+    - `Corner-Radius` decides the corner radius of each window.
+    - `Shadow` to turn on/off the shadow on each window.
+    - `Fading` to turn on/off fade in / fade out effect.
 
 ## 0.8.0
 - **! Required to run both `xmonad-manage setup` and re-installing your profile !**
