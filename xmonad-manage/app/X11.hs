@@ -215,14 +215,7 @@ picomConfig DisplayConfig{..} =
 picomWintypes :: DisplayConfig -> [(T.Text, [(T.Text, SettingsValue)])]
 picomWintypes DisplayConfig{..} =
   [
-    ( "tooltip"
-    ,
-      [ ("fade", SetFlag fading)
-      , ("shadow", SetFlag True)
-      , ("opacity", SetFloat 0.75)
-      , ("full-shadow", SetFlag False)
-      ]
-    )
+    ( "tooltip", [ ("fade", SetFlag fading), ("opacity", SetFloat 0.75)])
   , ("dock", [("shadow", SetFlag False), ("clip-shadow-above", SetFlag True)])
   , ("dnd", [("shadow", SetFlag False)])
   , ("popup-menu", [("opacity", SetFloat 0.8)]) -- Does not seem to work, but anyway..
